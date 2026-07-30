@@ -1,301 +1,297 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useTheme } from '../../../ThemeContext';
 import UnitView from './UnitView';
 import ReportManagement from './ReportManagement';
 import Reports from './Reports';
 import UserManagement from './UserManagement';
 import ComplianceView from './ComplianceView';
-import TrashView from './TrashView';
 import { Notifications, HistoryView, SettingsView } from './SharedViews';
+import apiClient from '../../../services/apiClient';
+import { getAllUsers } from '../../../services/authService';
 
-function SidebarComponent({ activeView, onViewChange, onLogout, role, trashCount = 2, notifCount = 3, userName = 'Coordinador' }) {
+/* ============================================================
+   ICONOS — línea profesional, 2px de trazo, estáticos (sin
+   emojis del sistema operativo). Paleta: verde institucional
+   + naranja como acento.
+   ============================================================ */
+const BRAND = {
+  greenDark: '#14532d',
+  green: '#166534',
+  greenMid: '#15803d',
+  greenSoft: '#16a34a',
+  orange: '#c2410c',
+  orangeMid: '#ea580c',
+  orangeSoft: '#f97316',
+};
+
+const Icon = ({ children, size = 18, ...props }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    {children}
+  </svg>
+);
+
+const IconHome = (p) => <Icon {...p}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></Icon>;
+const IconClipboard = (p) => <Icon {...p}><rect x="9" y="2" width="6" height="4" rx="1" /><path d="M5 4h2a2 2 0 012 2v1h6V6a2 2 0 012-2h2a2 2 0 012 2v16a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" /></Icon>;
+const IconBarChart = (p) => <Icon {...p}><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></Icon>;
+const IconTarget = (p) => <Icon {...p}><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></Icon>;
+const IconUsers = (p) => <Icon {...p}><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" /></Icon>;
+const IconBell = (p) => <Icon {...p}><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 01-3.46 0" /></Icon>;
+const IconClock = (p) => <Icon {...p}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></Icon>;
+const IconSettings = (p) => <Icon {...p}><circle cx="12" cy="12" r="3" /><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M19.07 19.07l-1.41-1.41M4.93 19.07l1.41-1.41M12 2v2M12 20v2M2 12h2M20 12h2" /></Icon>;
+const IconLogOut = (p) => <Icon {...p}><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" /></Icon>;
+// Ícono de "asistente" en forma de destello sólido, estático y elegante.
+const IconSparkle = (p) => (
+  <svg width={p.size || 18} height={p.size || 18} viewBox="0 0 24 24" fill="currentColor" {...p}>
+    <path d="M12 2.5c.6 4.3 2.9 6.6 7.2 7.2-4.3.6-6.6 2.9-7.2 7.2-.6-4.3-2.9-6.6-7.2-7.2 4.3-.6 6.6-2.9 7.2-7.2z" />
+  </svg>
+);
+
+// Icono tipo "hamburguesa en círculo" para el botón de abrir/cerrar el menú
+function MenuToggleIcon({ size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="7" y1="9" x2="17" y2="9" strokeLinecap="round" />
+      <line x1="7" y1="12" x2="17" y2="12" strokeLinecap="round" />
+      <line x1="7" y1="15" x2="17" y2="15" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function SidebarComponent({ activeView, onViewChange, onLogout, role, notifCount = 3, pendingCount = 0, userName = 'Coordinador' }) {
+  const { colors, theme } = useTheme();
+  const isDark = theme === 'dark';
+  const [expanded, setExpanded] = useState(false);
   const initials = userName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
   const principalItems = role === 'coordinator' ? [
-    { key: 'unit',              label: 'Unidad' },
-    { key: 'report-management', label: 'Gestión de informes', badge: notifCount },
-    { key: 'reports',           label: 'Reportes' },
-    { key: 'compliance',        label: 'Cumplimiento' },
-    { key: 'user-management',   label: 'Usuarios' },
-    { key: 'notifications',     label: 'Notificaciones' },
-    { key: 'history',           label: 'Historial' },
+    { key: 'unit',              label: 'Unidad', icon: <IconHome /> },
+    { key: 'report-management', label: 'Gestión de informes', badge: notifCount, icon: <IconClipboard /> },
+    { key: 'reports',           label: 'Reportes', icon: <IconBarChart /> },
+    { key: 'compliance',        label: 'Cumplimiento', icon: <IconTarget /> },
+    { key: 'user-management',   label: 'Usuarios', badge: pendingCount, icon: <IconUsers /> },
+    { key: 'notifications',     label: 'Notificaciones', icon: <IconBell /> },
+    { key: 'history',           label: 'Historial', icon: <IconClock /> },
   ] : [];
 
   const toolItems = role === 'coordinator' ? [
-    { key: 'ai-assistant', label: 'Asistente IA',  icon: '✨', dot: true },
-    { key: 'trash',        label: 'Papelera',       icon: '🗑',  badge: trashCount },
-    { key: 'settings',     label: 'Configuración',  icon: '⚙️' },
+    { key: 'ai-assistant', label: 'Asistente IA',  icon: <IconSparkle size={17} />, dot: true },
+    { key: 'settings',     label: 'Configuración',  icon: <IconSettings /> },
   ] : [];
 
   const renderItem = (item) => {
     const isActive = activeView === item.key;
     return (
-      <button key={item.key} onClick={() => onViewChange(item.key)} style={{
-        width: '100%', padding: '9px 12px', border: 'none', borderRadius: 10,
-        background: isActive ? '#F0FDF4' : 'transparent',
-        color: isActive ? '#16a34a' : '#374151',
+      <button key={item.key} onClick={() => onViewChange(item.key)} title={!expanded ? item.label : undefined} style={{
+        width: '100%', padding: expanded ? '9px 12px' : '9px 0', border: 'none', borderRadius: 10,
+        background: isActive ? (isDark ? 'rgba(21,128,61,0.22)' : '#F0FDF4') : 'transparent',
+        color: isActive ? (isDark ? '#4ADE80' : BRAND.greenMid) : colors.textSecondary,
         cursor: 'pointer', textAlign: 'left', fontSize: 13.5,
         fontWeight: isActive ? 700 : 500,
         display: 'flex', alignItems: 'center', gap: 10,
-        marginBottom: 2, transition: 'all .15s',
+        justifyContent: expanded ? 'flex-start' : 'center',
+        marginBottom: 2, transition: 'background .15s',
       }}
-        onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#F7F9FC'; }}
+        onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = colors.border; }}
         onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
       >
-        <span style={{ fontSize: 16, width: 20, textAlign: 'center' }}>{item.icon || ''}</span>
-        <span style={{ flex: 1 }}>{item.label}</span>
-        {item.badge > 0 && (
-          <span style={{ minWidth: 20, height: 20, borderRadius: 10, padding: '0 6px', background: '#16a34a', color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{item.badge}</span>
+        <span style={{ position: 'relative', display: 'flex', width: 20, justifyContent: 'center', flexShrink: 0, color: isActive ? (isDark ? '#4ADE80' : BRAND.greenMid) : colors.textMuted }}>
+          {item.icon || ''}
+          {!expanded && item.badge > 0 && (
+            <span style={{
+              position: 'absolute', top: -6, right: -8,
+              minWidth: 15, height: 15, borderRadius: 8, padding: '0 3px',
+              background: BRAND.orangeMid, color: '#fff', fontSize: 9, fontWeight: 700,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              border: `1.5px solid ${colors.card}`,
+            }}>{item.badge > 9 ? '9+' : item.badge}</span>
+          )}
+          {!expanded && item.dot && (
+            <span style={{
+              position: 'absolute', top: -2, right: -4,
+              width: 7, height: 7, borderRadius: '50%', background: BRAND.orangeMid,
+              border: `1.5px solid ${colors.card}`,
+            }} />
+          )}
+        </span>
+        {expanded && <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>}
+        {expanded && item.badge > 0 && (
+          <span style={{ minWidth: 20, height: 20, borderRadius: 10, padding: '0 6px', background: BRAND.orangeMid, color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{item.badge}</span>
         )}
-        {item.dot && (
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#a855f7', flexShrink: 0 }} />
+        {expanded && item.dot && (
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: BRAND.orangeMid, flexShrink: 0 }} />
         )}
-        {isActive && !item.badge && !item.dot && (
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16a34a', flexShrink: 0 }} />
+        {expanded && isActive && !item.badge && !item.dot && (
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: BRAND.greenMid, flexShrink: 0 }} />
         )}
       </button>
     );
   };
 
   return (
-    <aside style={{ width: 220, minWidth: 220, borderRight: '1px solid #E8ECF0', background: '#fff', display: 'flex', flexDirection: 'column', height: '100vh', position: 'sticky', top: 0 }}>
-      {/* Logo SENA */}
-      <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid #F0F2F5' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #16a34a, #15803d)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 11, letterSpacing: 0.5 }}>SENA</div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', lineHeight: 1.2 }}>Portal Coordinador</div>
-            <div style={{ fontSize: 11, color: '#9CA3AF' }}>Sistema de Gestión</div>
-          </div>
+    <aside style={{
+      width: expanded ? 220 : 72, minWidth: expanded ? 220 : 72,
+      borderRight: `1px solid ${colors.border}`, background: colors.card,
+      display: 'flex', flexDirection: 'column', height: '100vh',
+      position: 'sticky', top: 0, transition: 'width .18s ease, min-width .18s ease',
+      overflow: 'hidden',
+    }}>
+      <style>{`
+        .sidebar-scroll {
+          scrollbar-width: none;      /* Firefox */
+          -ms-overflow-style: none;   /* Edge/IE viejo */
+        }
+        .sidebar-scroll::-webkit-scrollbar {
+          width: 0;
+          height: 0;
+          display: none;              /* Chrome, Edge, Safari */
+        }
+      `}</style>
+      {/* Logo SENA + botón para abrir/cerrar */}
+      <div style={{ padding: expanded ? '18px 16px 14px' : '18px 0 14px', borderBottom: `1px solid ${colors.border}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: expanded ? 'space-between' : 'center', padding: expanded ? 0 : '0 12px' }}>
+          {expanded ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg, ${BRAND.greenMid}, ${BRAND.greenDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 11, letterSpacing: 0.5, flexShrink: 0 }}>SENA</div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: colors.text, lineHeight: 1.2, whiteSpace: 'nowrap' }}>Portal Coordinador</div>
+                  <div style={{ fontSize: 11, color: colors.textMuted, whiteSpace: 'nowrap' }}>Sistema de Gestión</div>
+                </div>
+              </div>
+              <button onClick={() => setExpanded(false)} title="Cerrar menú" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: colors.textMuted, padding: 4, flexShrink: 0, display: 'flex' }}
+                onMouseEnter={e => e.currentTarget.style.color = BRAND.greenMid}
+                onMouseLeave={e => e.currentTarget.style.color = colors.textMuted}
+              >
+                <MenuToggleIcon />
+              </button>
+            </>
+          ) : (
+            <button onClick={() => setExpanded(true)} title="Abrir menú" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: BRAND.greenMid, padding: 4, display: 'flex' }}>
+              <MenuToggleIcon size={26} />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Usuario logueado */}
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid #F0F2F5', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ padding: expanded ? '12px 16px' : '12px 0', borderBottom: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', gap: 10, justifyContent: expanded ? 'flex-start' : 'center' }}>
         <div style={{
           width: 34, height: 34, borderRadius: '50%',
-          background: '#E8ECF0', display: 'flex', alignItems: 'center',
+          background: isDark ? 'rgba(21,128,61,0.18)' : '#F0FDF4', display: 'flex', alignItems: 'center',
           justifyContent: 'center', fontSize: 12, fontWeight: 700,
-          color: '#6B7280', flexShrink: 0, border: '2px solid #D1D5DB',
+          color: BRAND.greenMid, flexShrink: 0, border: `2px solid ${isDark ? BRAND.greenMid : '#BBF7D0'}`,
         }}>
           {initials}
         </div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userName}</div>
-          <div style={{ fontSize: 11, color: '#9CA3AF' }}>Coordinador</div>
-        </div>
+        {expanded && (
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: colors.text, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userName}</div>
+            <div style={{ fontSize: 11, color: colors.textMuted }}>Coordinador</div>
+          </div>
+        )}
       </div>
-      <nav style={{ flex: 1, overflowY: 'auto', padding: '12px 10px' }}>
+      <nav className="sidebar-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: expanded ? '12px 10px' : '12px 8px' }}>
         {principalItems.length > 0 && (
           <>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', letterSpacing: '0.1em', textTransform: 'uppercase', padding: '6px 12px 8px', marginBottom: 2 }}>PRINCIPAL</div>
+            {expanded && <div style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', letterSpacing: '0.1em', textTransform: 'uppercase', padding: '6px 12px 8px', marginBottom: 2, whiteSpace: 'nowrap' }}>PRINCIPAL</div>}
             {principalItems.map(renderItem)}
           </>
         )}
         {toolItems.length > 0 && (
           <>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', letterSpacing: '0.1em', textTransform: 'uppercase', padding: '14px 12px 8px', marginBottom: 2 }}>HERRAMIENTAS</div>
+            {expanded && <div style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', letterSpacing: '0.1em', textTransform: 'uppercase', padding: '14px 12px 8px', marginBottom: 2, whiteSpace: 'nowrap' }}>HERRAMIENTAS</div>}
             {toolItems.map(renderItem)}
           </>
         )}
       </nav>
-      <div style={{ padding: '12px 10px', borderTop: '1px solid #F0F2F5' }}>
-        <button onClick={onLogout} style={{ width: '100%', padding: '9px 12px', border: 'none', borderRadius: 10, background: 'transparent', color: '#ef4444', cursor: 'pointer', textAlign: 'left', fontSize: 13.5, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 10, transition: 'background .15s' }}
+      <div style={{ padding: expanded ? '12px 10px' : '12px 8px', borderTop: `1px solid ${colors.border}` }}>
+        <button onClick={onLogout} title={!expanded ? 'Cerrar Sesión' : undefined} style={{ width: '100%', padding: expanded ? '9px 12px' : '9px 0', border: 'none', borderRadius: 10, background: 'transparent', color: '#dc2626', cursor: 'pointer', textAlign: 'left', fontSize: 13.5, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 10, justifyContent: expanded ? 'flex-start' : 'center', transition: 'background .15s' }}
           onMouseEnter={e => e.currentTarget.style.background = '#FEF2F2'}
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
         >
-          <span style={{ fontSize: 14 }}>→</span> Cerrar Sesión
+          <span style={{ display: 'flex', flexShrink: 0 }}><IconLogOut size={16} /></span> {expanded && 'Cerrar Sesión'}
         </button>
       </div>
     </aside>
   );
 }
 
-const NAV_ITEMS = [
-  { id: 'unit', label: 'Mi Unidad', icon: '🏠' },
-  { id: 'report-management', label: 'Gestión de Informes', icon: '📋' },
-  { id: 'reports', label: 'Reportes', icon: '📊' },
-  { id: 'compliance', label: 'Cumplimiento', icon: '🎯' },
-  { id: 'user-management', label: 'Gestión de Usuarios', icon: '👥' },
-  { id: 'ai-assistant', label: 'Asistente IA', icon: '🤖' },
-  { id: 'notifications', label: 'Notificaciones', icon: '🔔', badge: 3 },
-  { id: 'history', label: 'Historial', icon: '🕐' },
-  { id: 'settings', label: 'Configuración', icon: '⚙️' },
-];
-
-const ICON_MAP = {
-  '🏠': (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-    </svg>
-  ),
-  '📋': (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="9" y="2" width="6" height="4" rx="1"/><path d="M5 4h2a2 2 0 012 2v1h6V6a2 2 0 012-2h2a2 2 0 012 2v16a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z"/>
-    </svg>
-  ),
-  '📊': (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
-    </svg>
-  ),
-  '🎯': (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
-    </svg>
-  ),
-  '👥': (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
-    </svg>
-  ),
-  '🤖': (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M12 2v4m-4 5h.01M16 16h.01M8 16h.01M12 16h.01"/><circle cx="12" cy="6" r="2"/>
-    </svg>
-  ),
-  '🔔': (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/>
-    </svg>
-  ),
-  '🕐': (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-    </svg>
-  ),
-  '⚙️': (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M19.07 19.07l-1.41-1.41M4.93 19.07l1.41-1.41M12 2v2M12 20v2M2 12h2M20 12h2"/>
-    </svg>
-  ),
-};
-
-function Sidebar({ activeView, onViewChange, onLogout }) {
-  return (
-    <aside style={{
-      width: 240,
-      minHeight: '100vh',
-      background: '#fff',
-      borderRight: '1px solid #E8ECF0',
-      display: 'flex',
-      flexDirection: 'column',
-      padding: '0 0 24px',
-      position: 'sticky',
-      top: 0,
-      height: '100vh',
-      overflowY: 'auto',
-    }}>
-      {/* Logo */}
-      <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid #F0F2F5', marginBottom: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: 12,
-            background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
-            </svg>
-          </div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: '#111827', letterSpacing: '-0.3px' }}>SITMI</div>
-            <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 500 }}>Coordinator</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Nav */}
-      <nav style={{ flex: 1, padding: '4px 12px' }}>
-        {NAV_ITEMS.map((item) => {
-          const active = activeView === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => onViewChange(item.id)}
-              style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '9px 12px',
-                borderRadius: 10,
-                border: 'none',
-                cursor: 'pointer',
-                marginBottom: 2,
-                textAlign: 'left',
-                fontSize: 13.5,
-                fontWeight: active ? 600 : 400,
-                background: active ? '#F0FDF4' : 'transparent',
-                color: active ? '#16a34a' : '#6B7280',
-                transition: 'all .15s',
-              }}
-              onMouseEnter={(e) => { if (!active) { e.currentTarget.style.background = '#F9FAFB'; e.currentTarget.style.color = '#374151'; } }}
-              onMouseLeave={(e) => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#6B7280'; } }}
-            >
-              <span style={{ color: active ? '#16a34a' : '#9CA3AF', transition: 'color .15s', flexShrink: 0 }}>
-                {ICON_MAP[item.icon] || item.icon}
-              </span>
-              <span style={{ flex: 1 }}>{item.label}</span>
-              {item.badge && (
-                <span style={{
-                  background: '#22c55e', color: '#fff', borderRadius: 20,
-                  fontSize: 10, fontWeight: 700, padding: '2px 7px',
-                  minWidth: 18, textAlign: 'center',
-                }}>
-                  {item.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
-
-      {/* Logout */}
-      <div style={{ padding: '0 12px' }}>
-        <button
-          onClick={onLogout}
-          style={{
-            width: '100%', padding: '9px 12px', borderRadius: 10,
-            border: 'none', background: 'transparent', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 10,
-            fontSize: 13.5, color: '#EF4444', fontWeight: 500,
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = '#FEF2F2')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>
-          </svg>
-          Cerrar Sesión
-        </button>
-      </div>
-    </aside>
-  );
-}
-
-export default function CoordinatorDashboard({ user, onLogout, pendingUsers, setPendingUsers }) {
+export default function CoordinatorDashboard({ user, onLogout, pendingUsers, setPendingUsers, onAssignRole, onRejectUser, notifications, setNotifications }) {
+  const { theme, toggleTheme, colors } = useTheme();
+  const isDark = theme === 'dark';
   const [activeView, setActiveView] = useState('unit');
+  const [dbUsers, setDbUsers] = useState([]);
+
+  const fetchDbUsers = async () => {
+    try {
+      const data = await getAllUsers();
+      setDbUsers(data || []);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    fetchDbUsers();
+    const timer = setInterval(fetchDbUsers, 8000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const pendingCount = dbUsers.filter(u => u.estado === 'Pendiente').length;
+  const unreadNotifCount = (notifications || []).filter(n => !n.read).length;
 
   const renderView = () => {
     switch (activeView) {
-      case 'trash': return <TrashView />;
       case 'unit': return <UnitView userName={user?.name || 'María Coordinadora'} onViewChange={setActiveView} />;
       case 'report-management': return <ReportManagement />;
       case 'reports': return <Reports />;
       case 'compliance': return <ComplianceView />;
-      case 'user-management': return <UserManagement pendingUsers={pendingUsers} setPendingUsers={setPendingUsers} />;
-      case 'notifications': return <Notifications />;
+      case 'user-management': return (
+        <UserManagement
+          pendingUsers={pendingUsers}
+          setPendingUsers={setPendingUsers}
+          onAssignRole={onAssignRole}
+          onRejectUser={onRejectUser}
+        />
+      );
+      case 'notifications': return <Notifications notifications={notifications} setNotifications={setNotifications} />;
       case 'history': return <HistoryView />;
-      case 'settings': return <SettingsView userName={user?.name || 'María Coordinadora'} />;
+      case 'settings': return (
+        <SettingsView
+          userName={user?.name || 'María Coordinadora'}
+          darkMode={isDark}
+          onToggleDarkMode={toggleTheme}
+        />
+      );
       case 'ai-assistant': return <AIAssistant />;
       default: return <UnitView userName={user?.name || 'María Coordinadora'} onViewChange={setActiveView} />;
     }
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#F7F9FC', fontFamily: "'Inter', 'Segoe UI', sans-serif" }}>
-      <SidebarComponent activeView={activeView} onViewChange={setActiveView} onLogout={onLogout} role="coordinator" userName={user?.name || 'María Coordinadora'} />
-      <main style={{ flex: 1, padding: '28px 32px', overflowY: 'auto' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: colors.bg, color: colors.text, fontFamily: "'Inter', 'Segoe UI', sans-serif" }}>
+      <SidebarComponent
+        activeView={activeView}
+        onViewChange={setActiveView}
+        onLogout={onLogout}
+        role="coordinator"
+        userName={user?.name || 'María Coordinadora'}
+        notifCount={unreadNotifCount}
+        pendingCount={pendingCount}
+      />
+      <style>{`
+        .main-scroll {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .main-scroll::-webkit-scrollbar {
+          width: 0;
+          height: 0;
+          display: none;
+        }
+      `}</style>
+      <main className="main-scroll" style={{ flex: 1, padding: '28px 32px', overflowY: 'auto', background: colors.bg }}>
         {renderView()}
       </main>
     </div>
@@ -307,6 +303,7 @@ function AIAssistant() {
     { role: 'assistant', text: '¡Hola! Soy tu asistente virtual del SITMI. ¿En qué puedo ayudarte hoy? Puedo responder preguntas sobre cómo completar informes, fechas de entrega, documentos requeridos y más.' }
   ]);
   const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const suggestions = [
     '¿Qué documentos necesito para el informe GC?',
@@ -315,22 +312,36 @@ function AIAssistant() {
     '¿Qué hago si no realicé una actividad?',
   ];
 
+  const handleSend = async (text) => {
+    const msg = text || input.trim();
+    if (!msg) return;
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', text: msg }]);
+    setLoading(true);
+    try {
+      const { data } = await apiClient.post('/usuario/chat', { message: msg });
+      const reply = data.reply || 'Lo siento, no pude procesar tu consulta.';
+      setMessages(prev => [...prev, { role: 'assistant', text: reply }]);
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'assistant', text: 'Ocurrió un error al conectar con el asistente. Por favor intenta de nuevo.' }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div style={{ fontFamily: "'Inter', 'Segoe UI', sans-serif", color: '#111827', display: 'flex', gap: 20, height: 'calc(100vh - 56px)' }}>
       {/* Chat */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 16, border: '1px solid #E8ECF0', overflow: 'hidden' }}>
         {/* Header */}
         <div style={{ padding: '20px 24px', borderBottom: '1px solid #F0F2F5', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2a4 4 0 014 4v1h1a3 3 0 013 3v6a3 3 0 01-3 3H7a3 3 0 01-3-3V10a3 3 0 013-3h1V6a4 4 0 014-4z"/>
-              <circle cx="9" cy="13" r="1" fill="white"/><circle cx="15" cy="13" r="1" fill="white"/>
-            </svg>
+          <div style={{ width: 40, height: 40, borderRadius: 12, background: `linear-gradient(135deg, ${BRAND.greenMid}, ${BRAND.greenDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+            <IconSparkle size={19} />
           </div>
           <div>
             <div style={{ fontWeight: 700, fontSize: 15, color: '#111827' }}>Asistente IA</div>
-            <div style={{ fontSize: 12, color: '#22c55e', display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
+            <div style={{ fontSize: 12, color: BRAND.greenSoft, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: BRAND.greenSoft, display: 'inline-block' }} />
               Tu ayudante inteligente para resolver dudas sobre el sistema
             </div>
           </div>
@@ -340,13 +351,13 @@ function AIAssistant() {
           {messages.map((m, i) => (
             <div key={i} style={{ display: 'flex', justifyContent: m.role === 'assistant' ? 'flex-start' : 'flex-end' }}>
               {m.role === 'assistant' && (
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginRight: 8, marginTop: 2 }}>
-                  <span style={{ color: '#fff', fontSize: 12 }}>✦</span>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg, ${BRAND.greenMid}, ${BRAND.greenDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginRight: 8, marginTop: 2, color: '#fff' }}>
+                  <IconSparkle size={13} />
                 </div>
               )}
               <div style={{
                 maxWidth: '72%', padding: '12px 16px', borderRadius: m.role === 'assistant' ? '4px 16px 16px 16px' : '16px 4px 16px 16px',
-                background: m.role === 'assistant' ? '#F7F9FC' : 'linear-gradient(135deg, #22c55e, #16a34a)',
+                background: m.role === 'assistant' ? '#F7F9FC' : `linear-gradient(135deg, ${BRAND.greenSoft}, ${BRAND.greenMid})`,
                 color: m.role === 'assistant' ? '#374151' : '#fff',
                 fontSize: 14, lineHeight: 1.6,
                 border: m.role === 'assistant' ? '1px solid #E8ECF0' : 'none',
@@ -355,19 +366,31 @@ function AIAssistant() {
               </div>
             </div>
           ))}
+          {loading && (
+            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+              <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg, ${BRAND.greenMid}, ${BRAND.greenDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginRight: 8, marginTop: 2, color: '#fff' }}>
+                <IconSparkle size={13} />
+              </div>
+              <div style={{ maxWidth: '72%', padding: '12px 16px', borderRadius: '4px 16px 16px 16px', background: '#F7F9FC', color: '#6B7280', fontSize: 14, border: '1px solid #E8ECF0', fontStyle: 'italic' }}>
+                Pensando...
+              </div>
+            </div>
+          )}
         </div>
         {/* Input */}
         <div style={{ padding: '16px 24px', borderTop: '1px solid #F0F2F5', display: 'flex', gap: 10 }}>
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && input.trim()) { setMessages([...messages, { role: 'user', text: input }]); setInput(''); } }}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
             placeholder="Escribe tu pregunta aquí..."
             style={{ flex: 1, padding: '11px 16px', borderRadius: 12, border: '1px solid #E8ECF0', fontSize: 14, background: '#F7F9FC', outline: 'none', color: '#374151' }}
+            disabled={loading}
           />
           <button
-            onClick={() => { if (input.trim()) { setMessages([...messages, { role: 'user', text: input }]); setInput(''); } }}
-            style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #22c55e, #16a34a)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onClick={() => handleSend()}
+            disabled={loading}
+            style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg, ${BRAND.greenSoft}, ${BRAND.greenMid})`, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: loading ? 0.6 : 1 }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
@@ -380,17 +403,17 @@ function AIAssistant() {
       <div style={{ width: 280, display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ background: '#fff', borderRadius: 16, padding: '20px', border: '1px solid #E8ECF0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <span style={{ fontSize: 16 }}>✦</span>
+            <span style={{ color: BRAND.orangeMid, display: 'flex' }}><IconSparkle size={16} /></span>
             <span style={{ fontWeight: 600, fontSize: 14, color: '#111827' }}>Sugerencias</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {suggestions.map((s, i) => (
-              <button key={i} onClick={() => setInput(s)} style={{
+              <button key={i} onClick={() => handleSend(s)} disabled={loading} style={{
                 textAlign: 'left', padding: '10px 14px', borderRadius: 10, border: '1px solid #E8ECF0',
                 background: '#F7F9FC', fontSize: 13, color: '#374151', cursor: 'pointer', lineHeight: 1.4,
               }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = '#F0FDF4'; e.currentTarget.style.borderColor = '#bbf7d0'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = '#F7F9FC'; e.currentTarget.style.borderColor = '#E8ECF0'; }}
+                onMouseEnter={(e) => { if (!loading) { e.currentTarget.style.background = '#F0FDF4'; e.currentTarget.style.borderColor = '#bbf7d0'; } }}
+                onMouseLeave={(e) => { if (!loading) { e.currentTarget.style.background = '#F7F9FC'; e.currentTarget.style.borderColor = '#E8ECF0'; } }}
               >
                 {s}
               </button>
@@ -398,7 +421,7 @@ function AIAssistant() {
           </div>
         </div>
         <div style={{ background: '#F0FDF4', borderRadius: 16, padding: '20px', border: '1px solid #bbf7d0' }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: '#15803d', marginBottom: 12 }}>Ayuda rápida</div>
+          <div style={{ fontWeight: 600, fontSize: 14, color: BRAND.greenDark, marginBottom: 12 }}>Ayuda rápida</div>
           {['Pregunta sobre cualquier proceso', 'Obtén información de fechas', 'Consulta requisitos de informes', 'Resuelve dudas técnicas'].map((tip, i) => (
             <div key={i} style={{ fontSize: 13, color: '#166534', marginBottom: 6, display: 'flex', gap: 6 }}>
               <span>•</span><span>{tip}</span>

@@ -1,57 +1,267 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { useTheme } from '../../../ThemeContext';
 
-const monthlyData = [
-  { month: 'Ene', gc: 95, gf: 100 }, { month: 'Feb', gc: 92, gf: 98 },
-  { month: 'Mar', gc: 98, gf: 95 }, { month: 'Abr', gc: 90, gf: 96 },
-  { month: 'May', gc: 94, gf: 93 }, { month: 'Jun', gc: 97, gf: 99 },
-  { month: 'Jul', gc: 88, gf: 91 }, { month: 'Ago', gc: 93, gf: 95 },
-  { month: 'Sep', gc: 96, gf: 97 }, { month: 'Oct', gc: 91, gf: 94 },
-];
+/* ------------------------------------------------------------------ */
+/*  PALETA INSTITUCIONAL SENA                                          */
+/*  Verde: Manual Identidad Visual 2022-2026 (HEX 39A900)              */
+/*  Naranja: Manual Imagen Corporativa 2012 (HEX FC7323)               */
+/* ------------------------------------------------------------------ */
+const SENA = {
+  verde: '#39A900',
+  verdeOscuro: '#007832',
+  azulOscuro: '#00304D',
+  amarillo: '#FDC300',
+  naranja: '#FC7323',
+};
 
-const topInstructors = [
-  { name: 'María González', area: 'Coordinación · May Dueño', value: 100, initials: 'MG', color: '#6366f1', bg: '#EEF2FF' },
-  { name: 'Ana Jiménez', area: 'Sistemas · May Dueño', value: 100, initials: 'AJ', color: '#22c55e', bg: '#F0FDF4' },
-  { name: 'Laura Jiménez', area: 'Electrónica · May Dueño', value: 98, initials: 'LJ', color: '#f97316', bg: '#FFF7ED' },
-  { name: 'Miguel Torres', area: 'Coordinación · May Torres', value: 96, initials: 'MT', color: '#8b5cf6', bg: '#F5F3FF' },
-  { name: 'Carlos Rodríguez', area: 'Coordinación · May Torres', value: 94, initials: 'CR', color: '#ef4444', bg: '#FEF2F2' },
-];
+/* ------------------------------------------------------------------ */
+/*  ICONOS — línea, 1.8px, mismo set que UserManagement/CoordinatorViews */
+/* ------------------------------------------------------------------ */
+const iconBase = { fill: 'none', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
 
-function BarChart({ data }) {
-  const max = 100;
-  const barW = 20;
-  const chartH = 140;
-  const totalW = data.length * (barW * 2 + 12 + 8);
+function IconUsers({ size = 18, color = 'currentColor' }) {
   return (
-    <svg width="100%" viewBox={`0 0 ${totalW} ${chartH + 24}`} style={{ overflow: 'visible' }}>
-      {[50, 100].map((line) => (
-        <g key={line}>
-          <line x1={0} y1={chartH - (line / max) * chartH} x2={totalW} y2={chartH - (line / max) * chartH} stroke="#F0F2F5" strokeWidth={1} />
-          <text x={-4} y={chartH - (line / max) * chartH + 4} textAnchor="end" fontSize={9} fill="#9CA3AF">{line}</text>
-        </g>
-      ))}
-      {data.map((d, i) => {
-        const x = i * (barW * 2 + 12 + 8);
-        return (
-          <g key={d.month}>
-            <rect x={x} y={chartH - (d.gc / max) * chartH} width={barW} height={(d.gc / max) * chartH} fill="#22c55e" rx={4} />
-            <rect x={x + barW + 4} y={chartH - (d.gf / max) * chartH} width={barW} height={(d.gf / max) * chartH} fill="#6366f1" rx={4} />
-            <text x={x + barW} y={chartH + 14} textAnchor="middle" fontSize={9} fill="#9CA3AF">{d.month}</text>
-          </g>
-        );
-      })}
+    <svg width={size} height={size} viewBox="0 0 24 24" stroke={color} {...iconBase}>
+      <path d="M16 21v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 19.5V21" />
+      <circle cx="9" cy="8" r="3.25" />
+      <path d="M17.5 21v-1.5a3.3 3.3 0 0 0-2.2-3.1" />
+      <path d="M14.3 4.2a3.25 3.25 0 0 1 0 6.3" />
+    </svg>
+  );
+}
+function IconTarget({ size = 18, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" stroke={color} {...iconBase}>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="1.15" fill={color} stroke="none" />
+    </svg>
+  );
+}
+function IconClock({ size = 18, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" stroke={color} {...iconBase}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5.2l3.4 2" />
+    </svg>
+  );
+}
+function IconAlertTriangle({ size = 18, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" stroke={color} {...iconBase}>
+      <path d="M10.6 3.5 2.2 18a1.9 1.9 0 0 0 1.65 2.85h16.3A1.9 1.9 0 0 0 21.8 18L13.4 3.5a1.9 1.9 0 0 0-3.3 0Z" />
+      <path d="M12 9.5v4" />
+      <path d="M12 16.6h.01" />
+    </svg>
+  );
+}
+function IconBarChart({ size = 18, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" stroke={color} {...iconBase}>
+      <path d="M4 20V10" />
+      <path d="M12 20V4" />
+      <path d="M20 20v-7" />
+    </svg>
+  );
+}
+function IconDownload({ size = 18, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" stroke={color} {...iconBase}>
+      <path d="M12 4v11" />
+      <path d="m7.2 10.7 4.8 4.8 4.8-4.8" />
+      <path d="M5 19.5h14" />
+    </svg>
+  );
+}
+function IconCalendar({ size = 18, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" stroke={color} {...iconBase}>
+      <rect x="3.5" y="5" width="17" height="16" rx="2.2" />
+      <path d="M3.5 9.8h17" />
+      <path d="M8 3v3.6M16 3v3.6" />
     </svg>
   );
 }
 
-const areaData = [
-  { name: 'ADSO', value: 38, color: '#22c55e' },
-  { name: 'Redes', value: 27, color: '#6366f1' },
-  { name: 'Bienestar', value: 20, color: '#f97316' },
-  { name: 'Otro', value: 15, color: '#E8ECF0' },
-];
+// Brote — mismo guiño de "formación / crecimiento" del resto de la app
+function SproutIcon({ size = 16, color = '#fff' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20V10" />
+      <path d="M12 10c0-3.5-2.5-6-7-6 0 4.5 2.5 7 7 7" />
+      <path d="M12 13c0-3.9 2.8-6.7 7.5-6.7 0 4.9-2.8 7.7-7.5 7.7" />
+    </svg>
+  );
+}
 
-function DonutChart({ data }) {
+/* ------------------------------------------------------------------ */
+/*  DATOS BASE                                                         */
+/*  ⚠️ TODO: reemplazar con datos reales (API, backend, etc.)          */
+/* ------------------------------------------------------------------ */
+
+// Años disponibles en el selector de filtros
+const YEARS = ['2026', '2027', '2028'];
+
+const MONTHS_FULL = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
+const MONTHS_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+// Cantidad de meses del año actual que ya tienen informes cargados (0-12).
+// TODO: calcular/recibir este valor a partir de los datos reales.
+const MONTHS_WITH_DATA = 0;
+
+// Lista de áreas/programas. TODO: reemplazar por las áreas reales.
+const AREAS = [];
+
+// Datos por área. Estructura esperada por cada clave de AREAS:
+// {
+//   color: '#RRGGBB',           // color institucional asignado al área
+//   instructors: 0,              // total de instructores del área
+//   pending: 0,                  // informes pendientes
+//   alerts: 0,                   // alertas activas
+//   monthly: [                   // un objeto por cada mes con datos (según MONTHS_WITH_DATA)
+//     { gc: 0, gf: 0 },           // gc = Gestión Contractual %, gf = Gestión Financiera %
+//   ],
+//   topInstructors: [
+//     { name: '', value: 0, initials: '', color: '#RRGGBB', bg: '#RRGGBB' },
+//   ],
+// }
+// TODO: completar con los datos reales de cada área.
+const AREA_DATA = {};
+
+/* ------------------------------------------------------------------ */
+/*  HELPERS DE AGREGACIÓN                                              */
+/* ------------------------------------------------------------------ */
+
+function round(n) { return Math.round(n * 10) / 10; }
+
+function getMonthlyForArea(areaKey) {
+  const areas = areaKey === 'Todas las áreas' ? AREAS : [areaKey].filter(a => AREA_DATA[a]);
+  const months = [];
+  for (let i = 0; i < 12; i++) {
+    if (i >= MONTHS_WITH_DATA || areas.length === 0) { months.push(null); continue; }
+    let gcSum = 0, gfSum = 0;
+    areas.forEach(a => { gcSum += AREA_DATA[a].monthly[i]?.gc ?? 0; gfSum += AREA_DATA[a].monthly[i]?.gf ?? 0; });
+    months.push({ gc: round(gcSum / areas.length), gf: round(gfSum / areas.length) });
+  }
+  return months;
+}
+
+function getStatsForArea(areaKey, monthIndex) {
+  const areas = areaKey === 'Todas las áreas' ? AREAS : [areaKey].filter(a => AREA_DATA[a]);
+
+  if (areas.length === 0) {
+    return { instructors: 0, pending: 0, alerts: 0, compliance: null };
+  }
+
+  const instructors = areas.reduce((s, a) => s + (AREA_DATA[a].instructors ?? 0), 0);
+  const pending = areas.reduce((s, a) => s + (AREA_DATA[a].pending ?? 0), 0);
+  const alerts = areas.reduce((s, a) => s + (AREA_DATA[a].alerts ?? 0), 0);
+
+  let compliance = null;
+  if (monthIndex === null) {
+    let total = 0, count = 0;
+    areas.forEach(a => {
+      (AREA_DATA[a].monthly || []).forEach(m => { total += (m.gc + m.gf) / 2; count++; });
+    });
+    compliance = count ? round(total / count) : null;
+  } else if (monthIndex < MONTHS_WITH_DATA) {
+    let total = 0, count = 0;
+    areas.forEach(a => {
+      const m = AREA_DATA[a].monthly?.[monthIndex];
+      if (m) { total += (m.gc + m.gf) / 2; count++; }
+    });
+    compliance = count ? round(total / count) : null;
+  }
+
+  return { instructors, pending, alerts, compliance };
+}
+
+function getTopInstructorsForArea(areaKey) {
+  const areas = areaKey === 'Todas las áreas' ? AREAS : [areaKey].filter(a => AREA_DATA[a]);
+  const list = areas.flatMap(a => (AREA_DATA[a].topInstructors || []).map(i => ({ ...i, area: a })));
+  return list.sort((a, b) => b.value - a.value).slice(0, 5);
+}
+
+function getAreaBreakdown() {
+  const totalInstructors = AREAS.reduce((s, a) => s + (AREA_DATA[a]?.instructors ?? 0), 0);
+  if (totalInstructors === 0) return [];
+  return AREAS.map(a => ({
+    name: a,
+    value: round(((AREA_DATA[a]?.instructors ?? 0) / totalInstructors) * 100),
+    color: AREA_DATA[a]?.color || SENA.verde,
+  }));
+}
+
+/* ------------------------------------------------------------------ */
+/*  GRÁFICOS — reciben `c` (colors del tema) para grid/labels          */
+/* ------------------------------------------------------------------ */
+
+function BarChart({ data, c }) {
+  const max = 100;
+  const groupW = Math.max(46, Math.min(70, 480 / Math.max(data.length, 1)));
+  const barW = Math.min(22, (groupW - 8) / 2);
+  const chartH = 130;
+  const totalW = data.length * groupW;
+
+  return (
+    <div style={{ width: '100%', height: chartH + 26, overflow: 'hidden' }}>
+      <svg
+        width="100%"
+        height="100%"
+        viewBox={`0 0 ${totalW} ${chartH + 26}`}
+        preserveAspectRatio="xMidYMid meet"
+      >
+        {[50, 100].map((line) => (
+          <g key={line}>
+            <line x1={0} y1={chartH - (line / max) * chartH} x2={totalW} y2={chartH - (line / max) * chartH} stroke={c.border} strokeWidth={1} />
+            <text x={-4} y={chartH - (line / max) * chartH + 4} textAnchor="end" fontSize={9} fill={c.textFaint}>{line}</text>
+          </g>
+        ))}
+        {data.map((d, i) => {
+          const x = i * groupW + (groupW - (barW * 2 + 4)) / 2;
+          const hasData = d.value !== null;
+          return (
+            <g key={d.month}>
+              {hasData ? (
+                <>
+                  <rect x={x} y={chartH - (d.value.gc / max) * chartH} width={barW} height={(d.value.gc / max) * chartH} fill={SENA.verde} rx={4} />
+                  <rect x={x + barW + 4} y={chartH - (d.value.gf / max) * chartH} width={barW} height={(d.value.gf / max) * chartH} fill={SENA.naranja} rx={4} />
+                </>
+              ) : (
+                <>
+                  <rect x={x} y={chartH - 3} width={barW} height={3} fill={c.border} rx={2} />
+                  <rect x={x + barW + 4} y={chartH - 3} width={barW} height={3} fill={c.border} rx={2} />
+                </>
+              )}
+              <text x={x + barW} y={chartH + 16} textAnchor="middle" fontSize={9} fill={c.textFaint}>{d.month}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function DonutChart({ data, centerLabel, centerValue, c }) {
   const total = data.reduce((s, d) => s + d.value, 0);
+
+  if (!data.length || total === 0) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+        <svg width={140} height={140} viewBox="0 0 140 140">
+          <circle cx={70} cy={70} r={55} fill="none" stroke={c.border} strokeWidth={16} />
+          <circle cx={70} cy={70} r={32} fill={c.card} />
+          <text x={70} y={67} textAnchor="middle" fontSize={14} fontWeight={700} fill={c.text}>{centerValue}</text>
+          <text x={70} y={82} textAnchor="middle" fontSize={9} fill={c.textFaint}>{centerLabel}</text>
+        </svg>
+        <div style={{ fontSize: 12, color: c.textFaint }}>Sin datos por área</div>
+      </div>
+    );
+  }
+
   let cumulative = 0;
   const r = 55; const cx = 70; const cy = 70;
   const slices = data.map((d) => {
@@ -67,16 +277,16 @@ function DonutChart({ data }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
       <svg width={140} height={140} viewBox="0 0 140 140">
         {slices.map((s) => <path key={s.name} d={s.d} fill={s.color} />)}
-        <circle cx={cx} cy={cy} r={32} fill="#fff" />
-        <text x={cx} y={cy - 3} textAnchor="middle" fontSize={14} fontWeight={700} fill="#111827">89%</text>
-        <text x={cx} y={cy + 12} textAnchor="middle" fontSize={9} fill="#9CA3AF">General</text>
+        <circle cx={cx} cy={cy} r={32} fill={c.card} />
+        <text x={cx} y={cy - 3} textAnchor="middle" fontSize={14} fontWeight={700} fill={c.text}>{centerValue}</text>
+        <text x={cx} y={cy + 12} textAnchor="middle" fontSize={9} fill={c.textFaint}>{centerLabel}</text>
       </svg>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {data.map((d) => (
           <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
             <div style={{ width: 8, height: 8, borderRadius: 2, background: d.color, flexShrink: 0 }} />
-            <span style={{ color: '#6B7280' }}>{d.name}</span>
-            <span style={{ fontWeight: 700, color: '#111827', marginLeft: 'auto' }}>{d.value}%</span>
+            <span style={{ color: c.textMuted }}>{d.name}</span>
+            <span style={{ fontWeight: 700, color: c.text, marginLeft: 'auto' }}>{d.value}%</span>
           </div>
         ))}
       </div>
@@ -84,122 +294,232 @@ function DonutChart({ data }) {
   );
 }
 
-export default function Reports() {
-  const [year, setYear] = useState('2024');
+/* ------------------------------------------------------------------ */
+/*  COMPONENTE PRINCIPAL                                               */
+/* ------------------------------------------------------------------ */
 
-  const sel = { padding: '8px 12px', borderRadius: 8, border: '1px solid #E8ECF0', fontSize: 13, background: '#fff', color: '#374151', cursor: 'pointer', outline: 'none' };
+export default function Reports() {
+  const { colors: c } = useTheme();
+
+  const [year, setYear] = useState(YEARS[0] || '');
+  const [monthLabel, setMonthLabel] = useState('Todos los meses');
+  const [area, setArea] = useState('Todas las áreas');
+
+  const monthIndex = monthLabel === 'Todos los meses' ? null : MONTHS_FULL.indexOf(monthLabel);
+
+  // TODO: reemplazar esta condición por la lógica real que determine
+  // si el año seleccionado ya tiene informes cargados.
+  const yearHasData = AREAS.length > 0 && MONTHS_WITH_DATA > 0;
+
+  const monthlyRaw = useMemo(() => getMonthlyForArea(area), [area]);
+  const chartData = useMemo(() => {
+    if (monthIndex === null) {
+      return MONTHS_SHORT.map((m, i) => ({ month: m, value: monthlyRaw[i] }));
+    }
+    return [{ month: MONTHS_SHORT[monthIndex], value: monthlyRaw[monthIndex] }];
+  }, [monthlyRaw, monthIndex]);
+
+  const stats = useMemo(() => getStatsForArea(area, monthIndex), [area, monthIndex]);
+  const topInstructors = useMemo(() => getTopInstructorsForArea(area), [area]);
+  const areaBreakdown = useMemo(() => getAreaBreakdown(), []);
+
+  // No debe ser posible exportar nada mientras no haya informes cargados
+  // para el año/filtros seleccionados: sin esta guarda, el botón generaba
+  // un CSV vacío ("—", 0, 0, 0) que no le sirve a nadie.
+  const handleExportCSV = () => {
+    if (!yearHasData) return;
+
+    let csvContent = "\uFEFF"; // UTF-8 BOM
+    csvContent += "Reporte de Cumplimiento - SENA SITMI\n";
+    csvContent += `Filtros: Año: ${year} | Mes: ${monthLabel} | Área: ${area}\n\n`;
+
+    csvContent += "Indicador;Valor\n";
+    csvContent += `Total Instructores;${stats.instructors}\n`;
+    csvContent += `Cumplimiento General;${stats.compliance !== null ? stats.compliance + "%" : "—"}\n`;
+    csvContent += `Informes Pendientes;${stats.pending}\n`;
+    csvContent += `Con Alertas;${stats.alerts}\n\n`;
+
+    csvContent += "Mes;Gestion Contractual (GC) %;Gestion Financiera (GF) %\n";
+    chartData.forEach(d => {
+      const gcVal = d.value ? d.value.gc : "—";
+      const gfVal = d.value ? d.value.gf : "—";
+      csvContent += `${d.month};${gcVal};${gfVal}\n`;
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `reporte_cumplimiento_${year}_${area.replace(/\s+/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const sel = {
+    padding: '8px 12px', borderRadius: 8, border: `1px solid ${c.borderStrong}`,
+    fontSize: 13, background: c.inputBg, color: c.textSecondary, cursor: 'pointer', outline: 'none',
+  };
+
+  const statCards = [
+    { Icon: IconUsers, value: yearHasData ? stats.instructors : 0, label: 'Total Instructores', color: SENA.verde, bg: '#EAF6DE', trend: 'up' },
+    { Icon: IconTarget, value: yearHasData && stats.compliance !== null ? `${stats.compliance}%` : '—', label: 'Cumplimiento General', color: SENA.verde, bg: '#EAF6DE', trend: 'up' },
+    { Icon: IconClock, value: yearHasData ? stats.pending : 0, label: 'Informes Pendientes', color: '#8A6B00', bg: '#FFF6D6', trend: 'down' },
+    { Icon: IconAlertTriangle, value: yearHasData ? stats.alerts : 0, label: 'Con Alertas', color: '#ef4444', bg: '#FEF2F2', trend: 'down' },
+  ];
 
   return (
-    <div style={{ fontFamily: "'Inter', 'Segoe UI', sans-serif", color: '#111827' }}>
+    <div style={{ fontFamily: "'Inter', 'Segoe UI', sans-serif", color: c.text }}>
 
-      {/* Banner */}
-      <div style={{
-        background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
+      {/* Banner — degradado verde institucional SENA */}
+      <div className="coord-banner" style={{
+        background: `linear-gradient(135deg, ${SENA.verde} 0%, ${SENA.verdeOscuro} 100%)`,
         borderRadius: 16, padding: '24px 28px', marginBottom: 24,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         position: 'relative', overflow: 'hidden',
       }}>
-        <div style={{ position: 'absolute', right: -20, top: -30, width: 140, height: 140, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
-        <div style={{ color: '#fff' }}>
+        <div style={{ position: 'absolute', right: -20, top: -30, width: 140, height: 140, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
+        <div style={{ position: 'absolute', right: 130, bottom: -10, opacity: 0.16, transform: 'scale(2.6) rotate(8deg)' }}>
+          <SproutIcon size={40} color="#fff" />
+        </div>
+        <div style={{ color: '#fff', position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>📊</div>
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <IconBarChart size={15} color="#fff" />
+            </div>
             <span style={{ fontSize: 13, opacity: 0.9, fontWeight: 500 }}>Análisis y Estadísticas</span>
           </div>
           <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700, letterSpacing: '-0.4px' }}>Reportes y Estadísticas</h1>
           <p style={{ margin: 0, fontSize: 13, opacity: 0.85 }}>Visualiza el desempeño general de tu unidad</p>
         </div>
-        <button style={{
-          background: '#fff', color: '#16a34a', border: 'none',
-          borderRadius: 10, padding: '10px 20px', fontWeight: 700,
-          fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
-        }}>
-          ⬇ Exportar Reporte
+        <button
+          onClick={handleExportCSV}
+          disabled={!yearHasData}
+          title={yearHasData ? 'Descargar reporte en CSV' : 'No hay informes para exportar todavía'}
+          style={{
+            background: yearHasData ? '#fff' : 'rgba(255,255,255,0.35)',
+            color: yearHasData ? SENA.verdeOscuro : 'rgba(0,48,26,0.55)',
+            border: 'none',
+            borderRadius: 10, padding: '10px 20px', fontWeight: 700,
+            fontSize: 13, cursor: yearHasData ? 'pointer' : 'not-allowed',
+            display: 'flex', alignItems: 'center', gap: 7,
+            position: 'relative', opacity: yearHasData ? 1 : 0.75,
+          }}
+        >
+          <IconDownload size={15} color={yearHasData ? SENA.verdeOscuro : 'rgba(0,48,26,0.55)'} />
+          Exportar Reporte
         </button>
       </div>
 
       {/* Filtros */}
-      <div style={{ background: '#fff', borderRadius: 14, padding: '14px 18px', marginBottom: 20, border: '1px solid #F0F2F5', display: 'flex', gap: 10, alignItems: 'center' }}>
+      <div className="coord-filters" style={{ background: c.card, borderRadius: 14, padding: '14px 18px', marginBottom: 20, border: `1px solid ${c.border}`, display: 'flex', gap: 10, alignItems: 'center' }}>
         <select value={year} onChange={(e) => setYear(e.target.value)} style={sel}>
-          <option value="2024">2024</option><option value="2023">2023</option>
+          {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
-        <select style={sel}>
+        <select value={monthLabel} onChange={(e) => setMonthLabel(e.target.value)} style={sel}>
           <option>Todos los meses</option>
-          {['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'].map(m => <option key={m}>{m}</option>)}
+          {MONTHS_FULL.map(m => <option key={m}>{m}</option>)}
         </select>
-        <select style={sel}>
-          <option>Todas las áreas</option><option>Sistemas</option><option>Electrónica</option>
+        <select value={area} onChange={(e) => setArea(e.target.value)} style={sel}>
+          <option>Todas las áreas</option>
+          {AREAS.map(a => <option key={a}>{a}</option>)}
         </select>
         <select style={sel}><option>Todos</option></select>
       </div>
 
-      {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
-        {[
-          { icon: '👥', value: '45', label: 'Total Instructores', color: '#6366f1', bg: '#EEF2FF', trend: '↑' },
-          { icon: '🎯', value: '89%', label: 'Cumplimiento General', color: '#22c55e', bg: '#F0FDF4', trend: '↑' },
-          { icon: '⏰', value: '5', label: 'Informes Pendientes', color: '#f97316', bg: '#FFF7ED', trend: '↓' },
-          { icon: '🚨', value: '2', label: 'Con Alertas', color: '#ef4444', bg: '#FEF2F2', trend: '↓' },
-        ].map((s) => (
-          <div key={s.label} style={{ background: '#fff', borderRadius: 14, padding: '18px', border: '1px solid #F0F2F5', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 10, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>{s.icon}</div>
-              <span style={{ fontSize: 18, color: s.color, fontWeight: 700 }}>{s.trend}</span>
-            </div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: '#111827', letterSpacing: '-1px', lineHeight: 1 }}>{s.value}</div>
-            <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>{s.label}</div>
+      {!yearHasData ? (
+        <div style={{ background: c.card, borderRadius: 14, padding: '48px 24px', border: `1px solid ${c.border}`, textAlign: 'center', color: c.textMuted }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+            <IconCalendar size={30} color={c.textFaint} />
           </div>
-        ))}
-      </div>
-
-      {/* Charts */}
-      <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 20, marginBottom: 20 }}>
-        <div style={{ background: '#fff', borderRadius: 14, padding: 20, border: '1px solid #F0F2F5', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontWeight: 600, fontSize: 15, color: '#111827' }}>Cumplimiento Mensual {year}</div>
-            <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>Comparativa GC vs GF por mes</div>
-          </div>
-          <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
-            {[{ color: '#22c55e', label: 'GC' }, { color: '#6366f1', label: 'GF' }].map(l => (
-              <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                <div style={{ width: 10, height: 10, borderRadius: 2, background: l.color }} />
-                <span style={{ color: '#6B7280' }}>{l.label}</span>
+          <div style={{ fontWeight: 600, fontSize: 15, color: c.text, marginBottom: 4 }}>Aún no hay informes para {year}</div>
+          <div style={{ fontSize: 13 }}>Los datos de este año todavía no están disponibles.</div>
+        </div>
+      ) : (
+        <>
+          {/* Stats */}
+          <div className="coord-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+            {statCards.map((s) => (
+              <div key={s.label} style={{ background: c.card, borderRadius: 14, padding: '18px', border: `1px solid ${c.border}`, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 10, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <s.Icon size={19} color={s.color} />
+                  </div>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={s.color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    {s.trend === 'up'
+                      ? <path d="M6 17 12 7l6 10" />
+                      : <path d="M6 7 12 17l6-10" />}
+                  </svg>
+                </div>
+                <div style={{ fontSize: 28, fontWeight: 800, color: c.text, letterSpacing: '-1px', lineHeight: 1 }}>{s.value}</div>
+                <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4 }}>{s.label}</div>
               </div>
             ))}
           </div>
-          <div style={{ overflowX: 'auto' }}>
-            <BarChart data={monthlyData} />
-          </div>
-        </div>
-        <div style={{ background: '#fff', borderRadius: 14, padding: 20, border: '1px solid #F0F2F5', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontWeight: 600, fontSize: 15, color: '#111827' }}>Cumplimiento por Área</div>
-            <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>Desempeño por programa</div>
-          </div>
-          <DonutChart data={areaData} />
-        </div>
-      </div>
 
-      {/* Top instructors */}
-      <div style={{ background: '#fff', borderRadius: 14, padding: 20, border: '1px solid #F0F2F5', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-        <div style={{ fontWeight: 600, fontSize: 15, color: '#111827', marginBottom: 14 }}>Mejores Instructores</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {topInstructors.map((inst) => (
-            <div key={inst.name} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: inst.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: inst.color, flexShrink: 0 }}>{inst.initials}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: '#111827' }}>{inst.name}</div>
-                <div style={{ fontSize: 11, color: '#9CA3AF' }}>{inst.area}</div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: 180 }}>
-                <div style={{ flex: 1, height: 6, background: '#F0F2F5', borderRadius: 3, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${inst.value}%`, background: 'linear-gradient(90deg, #22c55e, #16a34a)', borderRadius: 3 }} />
+          {/* Charts */}
+          <div className="coord-grid" style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 20, marginBottom: 20 }}>
+            <div style={{ background: c.card, borderRadius: 14, padding: 20, border: `1px solid ${c.border}`, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontWeight: 600, fontSize: 15, color: c.text }}>
+                  Cumplimiento {monthIndex === null ? 'Mensual' : MONTHS_FULL[monthIndex]} {year}
+                  {area !== 'Todas las áreas' && ` · ${area}`}
                 </div>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#16a34a', minWidth: 36, textAlign: 'right' }}>{inst.value}%</span>
+                <div style={{ fontSize: 12, color: c.textFaint, marginTop: 2 }}>Comparativa GC vs GF por mes</div>
               </div>
+              <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
+                {[{ color: SENA.verde, label: 'GC' }, { color: SENA.naranja, label: 'GF' }].map(l => (
+                  <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                    <div style={{ width: 10, height: 10, borderRadius: 2, background: l.color }} />
+                    <span style={{ color: c.textMuted }}>{l.label}</span>
+                  </div>
+                ))}
+              </div>
+              <BarChart data={chartData} c={c} />
             </div>
-          ))}
-        </div>
-      </div>
+            <div style={{ background: c.card, borderRadius: 14, padding: 20, border: `1px solid ${c.border}`, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontWeight: 600, fontSize: 15, color: c.text }}>Cumplimiento por Área</div>
+                <div style={{ fontSize: 12, color: c.textFaint, marginTop: 2 }}>Desempeño por programa</div>
+              </div>
+              <DonutChart
+                data={areaBreakdown}
+                centerLabel="General"
+                centerValue={stats.compliance !== null ? `${stats.compliance}%` : '—'}
+                c={c}
+              />
+            </div>
+          </div>
+
+          {/* Top instructors */}
+          <div style={{ background: c.card, borderRadius: 14, padding: 20, border: `1px solid ${c.border}`, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+            <div style={{ fontWeight: 600, fontSize: 15, color: c.text, marginBottom: 14 }}>
+              Mejores Instructores{area !== 'Todas las áreas' && ` · ${area}`}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {topInstructors.length === 0 && (
+                <div style={{ fontSize: 13, color: c.textFaint }}>No hay instructores para mostrar.</div>
+              )}
+              {topInstructors.map((inst) => (
+                <div key={inst.name} className="coord-instructor-row" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: inst.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: inst.color, flexShrink: 0 }}>{inst.initials}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: c.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{inst.name}</div>
+                    <div style={{ fontSize: 11, color: c.textFaint }}>{inst.area}</div>
+                  </div>
+                  <div className="coord-progress" style={{ display: 'flex', alignItems: 'center', gap: 10, width: 180 }}>
+                    <div style={{ flex: 1, height: 6, background: c.border, borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${inst.value}%`, background: `linear-gradient(90deg, ${SENA.verde}, ${SENA.verdeOscuro})`, borderRadius: 3 }} />
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: SENA.verdeOscuro, minWidth: 36, textAlign: 'right' }}>{inst.value}%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

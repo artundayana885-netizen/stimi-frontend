@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import Toast from '../Toast';
 
 const FILE_ICONS = {
   DOCX: { icon: '📘', bg: '#EEF2FF', color: '#4f46e5', border: '#C7D2FE' },
@@ -13,19 +14,21 @@ const CATEGORY_STYLES = {
   'Personal':      { bg: '#F5F3FF', color: '#7c3aed' },
 };
 
-const initialTemplates = [
-  {
-    id: 1,
-    name: 'Plantilla_Plan_Formacion_2025.docx',
-    description: 'Formato oficial para el plan de formación anual',
-    category: 'Académico',
-    type: 'DOCX',
-    version: 'v1',
-    updatedAt: '2025-10-20',
-    updatedBy: 'Coordinación Académica',
-    size: '245 KB',
-  },
-];
+// Plantillas iniciales. TODO: reemplazar con datos reales (API/backend)
+// o dejar vacío si se cargarán únicamente vía "Nueva Plantilla".
+// Estructura esperada por cada elemento:
+// {
+//   id: number,
+//   name: string,          // nombre del archivo, p.ej. 'Plantilla_X.docx'
+//   description: string,
+//   category: 'Académico' | 'Evaluación' | 'Administrativo' | 'Personal',
+//   type: 'DOCX' | 'XLSX' | 'PDF',
+//   version: string,       // p.ej. 'v1'
+//   updatedAt: string,     // 'YYYY-MM-DD'
+//   updatedBy: string,
+//   size: string,          // p.ej. '245 KB'
+// }
+const initialTemplates = [];
 
 function UploadModal({ onClose, onUpload }) {
   const [form, setForm] = useState({ name: '', description: '', category: 'Académico', type: 'DOCX', version: 'v1' });
@@ -120,7 +123,7 @@ function UploadModal({ onClose, onUpload }) {
           </div>
 
           {/* Categoría + Tipo */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="coord-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={labelStyle}>Categoría</label>
               <select style={{ ...inputStyle, cursor: 'pointer' }} value={form.category} onChange={e => set('category', e.target.value)}>
@@ -142,7 +145,7 @@ function UploadModal({ onClose, onUpload }) {
           </div>
 
           {/* Botones */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 4 }}>
+          <div className="coord-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 4 }}>
             <button onClick={onClose} style={{ padding: '11px', borderRadius: 10, border: '1px solid #E8ECF0', background: '#F7F9FC', color: '#374151', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
             <button onClick={handleSubmit} style={{ padding: '11px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #22c55e, #16a34a)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
               ☁️ Subir Plantilla
@@ -164,7 +167,7 @@ function DeleteModal({ template, onClose, onConfirm }) {
           <div style={{ fontWeight: 700, fontSize: 16, color: '#111827' }}>Eliminar Plantilla</div>
           <div style={{ fontSize: 13, color: '#6B7280', marginTop: 6 }}>¿Seguro que deseas eliminar <strong>{template.name}</strong>? Esta acción no se puede deshacer.</div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div className="coord-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <button onClick={onClose} style={{ padding: '11px', borderRadius: 10, border: '1px solid #E8ECF0', background: '#F7F9FC', color: '#374151', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
           <button onClick={() => { onConfirm(template.id); onClose(); }} style={{ padding: '11px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #ef4444, #dc2626)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Sí, Eliminar</button>
         </div>
@@ -222,28 +225,37 @@ export default function TemplatesView() {
     t.category.toLowerCase().includes(search.toLowerCase())
   );
 
+  // Mes actual en formato 'YYYY-MM', usado para calcular "Subidas Este Mes"
+  // sin depender de fechas fijas de ejemplo.
+  const currentMonthPrefix = new Date().toISOString().slice(0, 7);
+
+  // TODO: calcular a partir de datos reales (p.ej. historial de cambios/versiones).
+  const updatesCount = 0;
+
+  // TODO: calcular a partir de la plantilla modificada más recientemente,
+  // o dejar '—' si aún no hay datos.
+  const lastUpdateLabel = templates.length
+    ? templates.reduce((latest, t) => (t.updatedAt > latest ? t.updatedAt : latest), templates[0].updatedAt)
+    : '—';
+
   const stats = [
-    { icon: '📋', label: 'Total Plantillas',      value: templates.length,                                   color: '#6366f1', bg: '#EEF2FF' },
-    { icon: '☁️', label: 'Subidas Este Mes',       value: templates.filter(t => t.updatedAt?.startsWith('2025-10') || t.updatedAt?.startsWith('2025-11')).length, color: '#22c55e', bg: '#F0FDF4' },
-    { icon: '✏️', label: 'Actualizaciones',        value: 0,                                                  color: '#f97316', bg: '#FFF7ED' },
-    { icon: '🕐', label: 'Última Actualización',   value: 'Hace 2 días',                                      color: '#0ea5e9', bg: '#F0F9FF', small: true },
+    { icon: '📋', label: 'Total Plantillas',      value: templates.length,                                                             color: '#6366f1', bg: '#EEF2FF' },
+    { icon: '☁️', label: 'Subidas Este Mes',       value: templates.filter(t => t.updatedAt?.startsWith(currentMonthPrefix)).length,     color: '#22c55e', bg: '#F0FDF4' },
+    { icon: '✏️', label: 'Actualizaciones',        value: updatesCount,                                                                  color: '#f97316', bg: '#FFF7ED' },
+    { icon: '🕐', label: 'Última Actualización',   value: lastUpdateLabel,                                                               color: '#0ea5e9', bg: '#F0F9FF', small: true },
   ];
 
   return (
     <div style={{ fontFamily: "'Inter','Segoe UI',sans-serif", color: '#111827' }}>
 
       {/* Toast */}
-      {toast && (
-        <div style={{ position: 'fixed', top: 24, right: 24, zIndex: 2000, background: toast.color, color: '#fff', padding: '12px 20px', borderRadius: 12, fontSize: 13, fontWeight: 600, boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
-          {toast.msg}
-        </div>
-      )}
+      <Toast toast={toast} />
 
       {showUpload && <UploadModal onClose={() => setShowUpload(false)} onUpload={handleUpload} />}
       <DeleteModal template={deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDelete} />
 
       {/* Banner */}
-      <div style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', borderRadius: 16, padding: '24px 28px', marginBottom: 24, color: '#fff', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div className="coord-banner" style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', borderRadius: 16, padding: '24px 28px', marginBottom: 24, color: '#fff', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ position: 'absolute', right: -20, top: -30, width: 160, height: 160, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -259,7 +271,7 @@ export default function TemplatesView() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 24 }}>
+      <div className="coord-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 24 }}>
         {stats.map(s => (
           <div key={s.label} style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: '1px solid #F0F2F5', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
             <div style={{ width: 40, height: 40, borderRadius: 10, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, marginBottom: 10 }}>{s.icon}</div>
@@ -288,8 +300,9 @@ export default function TemplatesView() {
           </div>
         </div>
 
-        {/* Cabecera columnas */}
-        <div style={{ display: 'grid', gridTemplateColumns: '3fr 1.2fr 0.8fr 0.6fr 1.6fr 1fr', gap: 0, padding: '10px 24px', background: '#F7F9FC', borderBottom: '1px solid #F0F2F5' }}>
+        {/* Cabecera columnas + filas: scroll horizontal en pantallas pequeñas */}
+        <div className="coord-table-scroll">
+        <div className="coord-table-row" style={{ display: 'grid', gridTemplateColumns: '3fr 1.2fr 0.8fr 0.6fr 1.6fr 1fr', gap: 0, padding: '10px 24px', background: '#F7F9FC', borderBottom: '1px solid #F0F2F5' }}>
           {['Documento', 'Categoría', 'Tipo', 'Versión', 'Última Actualización', 'Acciones'].map(h => (
             <div key={h} style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</div>
           ))}
@@ -305,7 +318,7 @@ export default function TemplatesView() {
           const fi = FILE_ICONS[tpl.type] || FILE_ICONS.PDF;
           const cat = CATEGORY_STYLES[tpl.category] || { bg: '#F7F9FC', color: '#374151' };
           return (
-            <div key={tpl.id} style={{
+            <div key={tpl.id} className="coord-table-row" style={{
               display: 'grid', gridTemplateColumns: '3fr 1.2fr 0.8fr 0.6fr 1.6fr 1fr',
               gap: 0, padding: '14px 24px', alignItems: 'center',
               borderBottom: i < filtered.length - 1 ? '1px solid #F7F9FC' : 'none',
@@ -352,6 +365,7 @@ export default function TemplatesView() {
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );

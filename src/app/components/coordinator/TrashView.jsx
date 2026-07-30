@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import Toast from '../Toast';
 
-const initialTrash = [
-  { id: 1, name: 'Borrador Informe GC - Octubre', deletedAt: '2024-10-15', tag: 'Borrador', tagColor: '#ef4444', tagBg: '#FEF2F2' },
-  { id: 2, name: 'Informe GF - Agosto',           deletedAt: '2024-08-20', tag: 'Informe',  tagColor: '#0ea5e9', tagBg: '#F0F9FF' },
-];
+// Documentos en la papelera. TODO: reemplazar con datos reales (API/backend)
+// o dejar vacío si se llenará únicamente cuando el usuario elimine documentos.
+// Estructura esperada por cada elemento:
+// { id: number, name: string, deletedAt: 'YYYY-MM-DD', tag: string, tagColor: '#RRGGBB', tagBg: '#RRGGBB' }
+const initialTrash = [];
 
 export default function TrashView({ onRestore }) {
   const [items, setItems] = useState(initialTrash);
@@ -31,11 +33,7 @@ export default function TrashView({ onRestore }) {
     <div style={{ fontFamily: "'Inter','Segoe UI',sans-serif", color: '#111827' }}>
 
       {/* Toast */}
-      {toast && (
-        <div style={{ position: 'fixed', top: 24, right: 24, zIndex: 2000, background: toast.color, color: '#fff', padding: '12px 20px', borderRadius: 12, fontSize: 13, fontWeight: 600, boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
-          {toast.msg}
-        </div>
-      )}
+      <Toast toast={toast} />
 
       {/* Modal confirmar eliminación permanente */}
       {confirmDelete && (
