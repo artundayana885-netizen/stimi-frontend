@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import ReportGC from './ReportGC';
 import ReportGF from './ReportGF';
+import ReportFolders from './ReportFolders';
 import { useTheme } from '../../../ThemeContext';
 
 // ── Íconos de línea, consistentes con el resto de la app ─────────────────
@@ -23,10 +24,21 @@ const IconClipboard = (p) => (
     <path d="M9 12h6" /><path d="M9 16h6" /><path d="M9 8h6" />
   </svg>
 );
+const IconFolder = (p) => (
+  <svg viewBox="0 0 24 24" width={p?.size || 15} height={p?.size || 15} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+  </svg>
+);
+const IconPlus = (p) => (
+  <svg viewBox="0 0 24 24" width={p?.size || 15} height={p?.size || 15} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+);
 
 export default function NewReport() {
   const { colors, theme } = useTheme();
   const [selectedType, setSelectedType] = useState(null);
+  const [tab, setTab] = useState('nuevo'); // 'nuevo' | 'carpetas'
 
   if (selectedType === 'gc') return <ReportGC onBack={() => setSelectedType(null)} />;
   if (selectedType === 'gf') return <ReportGF onBack={() => setSelectedType(null)} />;
@@ -42,6 +54,24 @@ export default function NewReport() {
   const iconBoxBorder = theme === 'dark' ? '#1F4A2E' : '#bbf7d0';
   const infoBg = theme === 'dark' ? colors.bgAlt : '#F9FAFB';
 
+  const tabBtn = (key, label, Icon) => {
+    const active = tab === key;
+    return (
+      <button
+        onClick={() => setTab(key)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 7,
+          padding: '9px 18px', borderRadius: 10, border: 'none', cursor: 'pointer',
+          fontSize: 13.5, fontWeight: 700, transition: 'all .2s',
+          background: active ? 'linear-gradient(135deg, #39A900, #2d8400)' : 'transparent',
+          color: active ? '#fff' : colors.textMuted,
+        }}
+      >
+        <Icon size={14} /> {label}
+      </button>
+    );
+  };
+
   return (
     <div style={{ fontFamily: "'Inter','Segoe UI',sans-serif", color: colors.text }}>
       <style>{`
@@ -56,72 +86,87 @@ export default function NewReport() {
         }
       `}</style>
 
-      {/* Header */}
-      <div style={{ marginBottom: 28 }}>
-        <h2 style={{ margin: '0 0 6px', fontSize: 24, fontWeight: 700 }}>Nuevo Informe</h2>
-        <p style={{ margin: 0, fontSize: 14, color: colors.textMuted }}>Selecciona el tipo de informe y carga el documento ya diligenciado</p>
-      </div>
-
-      {/* Instructions */}
-      <div style={{ background: theme === 'dark' ? '#10233F' : '#EFF6FF', border: `1px solid ${theme === 'dark' ? '#1E3A6B' : '#BFDBFE'}`, borderLeft: '4px solid #2563eb', borderRadius: 12, padding: '16px 20px', marginBottom: 32 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700, fontSize: 13, color: theme === 'dark' ? '#93C5FD' : '#1e40af', marginBottom: 8 }}>
-          <IconClipboard /> Instrucciones
+      {/* Header + selector de pestañas */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 28 }}>
+        <div>
+          <h2 style={{ margin: '0 0 6px', fontSize: 24, fontWeight: 700 }}>{tab === 'nuevo' ? 'Nuevo Informe' : 'Mis Informes'}</h2>
+          <p style={{ margin: 0, fontSize: 14, color: colors.textMuted }}>
+            {tab === 'nuevo' ? 'Selecciona el tipo de informe y carga el documento ya diligenciado' : 'Organizados automáticamente en carpetas por mes de radicación'}
+          </p>
         </div>
-        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: theme === 'dark' ? '#93C5FD' : '#1d4ed8', lineHeight: 1.8 }}>
-          <li>Los informes deben ser entregados entre el día 1 y 28 de cada mes</li>
-          <li>El informe se elabora fuera de la plataforma; aquí solo lo cargas para validación</li>
-          <li>Asegúrate de completar todos los campos obligatorios y adjuntar el documento principal</li>
-          <li>Puedes revisar el archivo con "Ver archivo" antes de enviarlo</li>
-          <li>Supervisión revisará que el informe cumpla con todos los parámetros antes de aprobarlo</li>
-        </ul>
+        <div style={{ display: 'flex', gap: 6, background: infoBg, borderRadius: 12, padding: 5, border: `1px solid ${colors.border}` }}>
+          {tabBtn('nuevo', 'Nuevo informe', IconPlus)}
+          {tabBtn('carpetas', 'Mis carpetas', IconFolder)}
+        </div>
       </div>
 
-      {/* Cards */}
-      <div className="nr-grid">
-        {/* GC */}
-        <div
-          style={cardBase}
-          onClick={() => setSelectedType('gc')}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = '#39A900'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(57,169,0,0.15)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = colors.border; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)'; e.currentTarget.style.transform = 'none'; }}
-        >
-          <div style={{ width: 72, height: 72, borderRadius: 20, background: iconBoxBg, border: `1px solid ${iconBoxBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#39A900', marginBottom: 18 }}><IconFileText /></div>
-          <h3 style={{ margin: '0 0 10px', fontSize: 18, fontWeight: 700, color: '#39A900' }}>Gestión Contractual (GC)</h3>
-          <p style={{ margin: '0 0 22px', fontSize: 13, color: colors.textMuted, lineHeight: 1.6 }}>Carga tu informe de gestión contractual con evidencias de las 17 obligaciones establecidas</p>
-          <div style={{ width: '100%', background: infoBg, borderRadius: 12, padding: '14px 16px', marginBottom: 22, textAlign: 'left' }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: colors.textSecondary, marginBottom: 8 }}>Qué debes cargar:</div>
-            {['Mes y año del informe', 'Documento del informe (PDF o Word)'].map((d, i) => (
-              <div key={i} style={{ fontSize: 12, color: colors.textMuted, lineHeight: 1.8 }}>• {d}</div>
-            ))}
+      {tab === 'carpetas' ? (
+        <ReportFolders />
+      ) : (
+        <>
+          {/* Instructions */}
+          <div style={{ background: theme === 'dark' ? '#10233F' : '#EFF6FF', border: `1px solid ${theme === 'dark' ? '#1E3A6B' : '#BFDBFE'}`, borderLeft: '4px solid #2563eb', borderRadius: 12, padding: '16px 20px', marginBottom: 32 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700, fontSize: 13, color: theme === 'dark' ? '#93C5FD' : '#1e40af', marginBottom: 8 }}>
+              <IconClipboard /> Instrucciones
+            </div>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: theme === 'dark' ? '#93C5FD' : '#1d4ed8', lineHeight: 1.8 }}>
+              <li>Los informes deben ser entregados entre el día 1 y 28 de cada mes</li>
+              <li>El informe se elabora fuera de la plataforma; aquí solo lo cargas para validación</li>
+              <li>Asegúrate de completar todos los campos obligatorios y adjuntar el documento principal</li>
+              <li>Puedes revisar el archivo con "Ver archivo" antes de enviarlo</li>
+              <li>Supervisión revisará que el informe cumpla con todos los parámetros antes de aprobarlo</li>
+              <li>Cada informe se guarda automáticamente en la carpeta de su mes — puedes verlas en "Mis carpetas"</li>
+            </ul>
           </div>
-          <button
-            style={{ width: '100%', padding: '12px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, #39A900, #2d8400)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
-            onClick={e => { e.stopPropagation(); setSelectedType('gc'); }}
-          >Cargar Informe GC</button>
-        </div>
 
-        {/* GF */}
-        <div
-          style={cardBase}
-          onClick={() => setSelectedType('gf')}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = '#39A900'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(57,169,0,0.15)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = colors.border; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)'; e.currentTarget.style.transform = 'none'; }}
-        >
-          <div style={{ width: 72, height: 72, borderRadius: 20, background: iconBoxBg, border: `1px solid ${iconBoxBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#39A900', marginBottom: 18 }}><IconWallet /></div>
-          <h3 style={{ margin: '0 0 10px', fontSize: 18, fontWeight: 700, color: '#39A900' }}>Gestión Financiera (GF)</h3>
-          <p style={{ margin: '0 0 22px', fontSize: 13, color: colors.textMuted, lineHeight: 1.6 }}>Carga tu informe de gestión financiera con planillas de pago y comprobantes</p>
-          <div style={{ width: '100%', background: infoBg, borderRadius: 12, padding: '14px 16px', marginBottom: 22, textAlign: 'left' }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: colors.textSecondary, marginBottom: 8 }}>Qué debes cargar:</div>
-            {['Documento del informe (PDF o Word)', 'Planilla de seguridad social', 'Planilla de salud y pensión', 'Comprobante de pago', 'Dependientes / contratista (si aplica)'].map((d, i) => (
-              <div key={i} style={{ fontSize: 12, color: colors.textMuted, lineHeight: 1.8 }}>• {d}</div>
-            ))}
+          {/* Cards */}
+          <div className="nr-grid">
+            {/* GC */}
+            <div
+              style={cardBase}
+              onClick={() => setSelectedType('gc')}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#39A900'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(57,169,0,0.15)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = colors.border; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)'; e.currentTarget.style.transform = 'none'; }}
+            >
+              <div style={{ width: 72, height: 72, borderRadius: 20, background: iconBoxBg, border: `1px solid ${iconBoxBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#39A900', marginBottom: 18 }}><IconFileText /></div>
+              <h3 style={{ margin: '0 0 10px', fontSize: 18, fontWeight: 700, color: '#39A900' }}>Gestión Contractual (GC)</h3>
+              <p style={{ margin: '0 0 22px', fontSize: 13, color: colors.textMuted, lineHeight: 1.6 }}>Carga tu informe de gestión contractual con evidencias de las 17 obligaciones establecidas</p>
+              <div style={{ width: '100%', background: infoBg, borderRadius: 12, padding: '14px 16px', marginBottom: 22, textAlign: 'left' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: colors.textSecondary, marginBottom: 8 }}>Qué debes cargar:</div>
+                {['Mes y año del informe', 'Documento del informe (PDF o Word)'].map((d, i) => (
+                  <div key={i} style={{ fontSize: 12, color: colors.textMuted, lineHeight: 1.8 }}>• {d}</div>
+                ))}
+              </div>
+              <button
+                style={{ width: '100%', padding: '12px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, #39A900, #2d8400)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+                onClick={e => { e.stopPropagation(); setSelectedType('gc'); }}
+              >Cargar Informe GC</button>
+            </div>
+
+            {/* GF */}
+            <div
+              style={cardBase}
+              onClick={() => setSelectedType('gf')}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#39A900'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(57,169,0,0.15)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = colors.border; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)'; e.currentTarget.style.transform = 'none'; }}
+            >
+              <div style={{ width: 72, height: 72, borderRadius: 20, background: iconBoxBg, border: `1px solid ${iconBoxBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#39A900', marginBottom: 18 }}><IconWallet /></div>
+              <h3 style={{ margin: '0 0 10px', fontSize: 18, fontWeight: 700, color: '#39A900' }}>Gestión Financiera (GF)</h3>
+              <p style={{ margin: '0 0 22px', fontSize: 13, color: colors.textMuted, lineHeight: 1.6 }}>Carga tu informe de gestión financiera con planillas de pago y comprobantes</p>
+              <div style={{ width: '100%', background: infoBg, borderRadius: 12, padding: '14px 16px', marginBottom: 22, textAlign: 'left' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: colors.textSecondary, marginBottom: 8 }}>Qué debes cargar:</div>
+                {['Documento del informe (PDF o Word)', 'Planilla de seguridad social', 'Planilla de salud y pensión', 'Comprobante de pago', 'Dependientes / contratista (si aplica)'].map((d, i) => (
+                  <div key={i} style={{ fontSize: 12, color: colors.textMuted, lineHeight: 1.8 }}>• {d}</div>
+                ))}
+              </div>
+              <button
+                style={{ width: '100%', padding: '12px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, #39A900, #2d8400)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+                onClick={e => { e.stopPropagation(); setSelectedType('gf'); }}
+              >Cargar Informe GF</button>
+            </div>
           </div>
-          <button
-            style={{ width: '100%', padding: '12px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, #39A900, #2d8400)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
-            onClick={e => { e.stopPropagation(); setSelectedType('gf'); }}
-          >Cargar Informe GF</button>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import './LoginScreen.css';
-import { loginUser, registerUser, forgotPassword, verifyResetCode, resetPassword } from '../../services/authService';
+import { loginUser, registerUser, forgotPassword, verifyResetCode, resetPassword, getAllUsers } from '../../services/authService';
 
 const IconMail = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -188,6 +188,7 @@ const ARL_OPTIONS = [
 // mensajes entendibles según la pantalla donde ocurrió el error.
 
 const NETWORK_ERROR_MESSAGE = 'No se pudo conectar con el servidor. Verifica tu conexión a internet e inténtalo de nuevo.';
+const PENDING_APPROVAL_MESSAGE = 'Tu solicitud de registro aún no ha sido aceptada por el coordinador.';
 
 const DEFAULT_ERROR_MESSAGES = {
   login: 'No pudimos iniciar sesión. Verifica tu correo y contraseña.',
@@ -206,6 +207,7 @@ const CONTEXT_STATUS_MESSAGES = {
     'not found': 'No encontramos una cuenta con ese correo electrónico.',
     'bad request': 'Revisa que el correo y la contraseña estén completos y sean válidos.',
     'too many requests': 'Demasiados intentos de inicio de sesión. Espera unos minutos e inténtalo de nuevo.',
+    pending: PENDING_APPROVAL_MESSAGE,
   },
   register: {
     conflict: 'Ya existe una cuenta registrada con este correo, número de contrato o compromiso SIIF.',
@@ -237,7 +239,7 @@ const CONTEXT_STATUS_MESSAGES = {
 const GENERIC_HTTP_PHRASES = [
   'conflict', 'unauthorized', 'forbidden', 'not found', 'bad request',
   'internal server error', 'too many requests', 'gateway timeout',
-  'service unavailable', 'request timeout',
+  'service unavailable', 'request timeout', 'pending',
 ];
 
 const getFriendlyErrorMessage = (err, context) => {
@@ -247,6 +249,14 @@ const getFriendlyErrorMessage = (err, context) => {
   // Sin conexión con el servidor / backend caído
   if (!raw || lower.includes('failed to fetch') || lower.includes('networkerror') || lower.includes('network request failed')) {
     return NETWORK_ERROR_MESSAGE;
+  }
+
+  // Cuenta registrada pero aún pendiente de aprobación del coordinador
+  if (
+    context === 'login' &&
+    (lower === 'pendiente' || lower.includes('pending') || lower.includes('no aprobad') || lower.includes('en revisión') || lower.includes('en revision'))
+  ) {
+    return PENDING_APPROVAL_MESSAGE;
   }
 
   // Texto técnico de HTTP sin traducir (ej: "Conflict", "Not Found") -> usar mensaje específico de la pantalla
@@ -345,27 +355,53 @@ export default function LoginScreen({ onLogin }) {
   };
 
   const handleLogin = async (event) => {
-    event.preventDefault();
-    if (!email || !password) {
-      showToast('error', 'Por favor completa todos los campos');
+  event.preventDefault();
+  if (!email || !password) {
+    showToast('error', 'Por favor completa todos los campos');
+    return;
+  }
+  setIsLoading(true);
+  try {
+    const userProfile = await loginUser(email.trim(), password);
+    onLogin(userProfile);
+  } catch (err) {
+    console.warn("Login falló, verificando si la cuenta está pendiente de aprobación...", err);
+
+    // El backend no distingue "credenciales incorrectas" de "cuenta
+    // pendiente": ambos casos devuelven el mismo mensaje. Como workaround,
+    // consultamos la lista de usuarios para ver si el correo ingresado
+    // pertenece a una cuenta que aún no fue aprobada por el coordinador.
+    let cuentaPendiente = false;
+    try {
+      const users = await getAllUsers();
+      const match = (users || []).find(
+        u => (u.email || '').trim().toLowerCase() === email.trim().toLowerCase()
+      );
+      if (match && (match.estado || '').toString().trim().toLowerCase() === 'pendiente') {
+        cuentaPendiente = true;
+      }
+    } catch (lookupErr) {
+      // Si esta consulta falla (ej. requiere estar autenticado), simplemente
+      // seguimos con el flujo normal de error y no bloqueamos el login.
+      console.warn("No se pudo verificar el estado de la cuenta:", lookupErr);
+    }
+
+    if (cuentaPendiente) {
+      showToast('error', PENDING_APPROVAL_MESSAGE, 6000);
+      setIsLoading(false);
       return;
     }
-    setIsLoading(true);
-    try {
-      const userProfile = await loginUser(email.trim(), password);
-      onLogin(userProfile);
-    } catch (err) {
-      console.warn("Autenticación remota fallida, intentando cuentas locales estáticas de respaldo...", err);
-      const account = ACCOUNTS[email.trim().toLowerCase()];
-      if (account && password.trim() === account.password) {
-        onLogin({ role: account.role, name: account.name, email: email.trim().toLowerCase() });
-      } else {
-        showToast('error', getFriendlyErrorMessage(err, 'login'));
-      }
-    } finally {
-      setIsLoading(false);
+
+    const account = ACCOUNTS[email.trim().toLowerCase()];
+    if (account && password.trim() === account.password) {
+      onLogin({ role: account.role, name: account.name, email: email.trim().toLowerCase() });
+    } else {
+      showToast('error', getFriendlyErrorMessage(err, 'login'));
     }
-  };
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   // Paso 1: pide el correo y envía el código (/api/forgot-password)
   const handleSendResetCode = async (event) => {

@@ -8,9 +8,12 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localho
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  // No fijamos aquí un Content-Type global: axios ya pone
+  // 'application/json' automáticamente en peticiones con objetos planos,
+  // y calcula 'multipart/form-data; boundary=...' automáticamente cuando
+  // el body es un FormData (como al subir evidencias). Si se deja fijo en
+  // 'application/json', las subidas de archivo se rompen porque el
+  // boundary nunca se genera y el backend no reconoce el archivo.
   withCredentials: true, // Habilitar envío de cookies si el backend las requiere
 });
 
@@ -37,10 +40,12 @@ apiClient.interceptors.response.use(
     if (error.response) {
       const { status, data } = error.response;
 
-      // Intentar extraer el mensaje específico enviado por el backend (error o message)
-      const backendMessage = data?.error || data?.message;
-      const formattedMessage = Array.isArray(backendMessage) 
-        ? backendMessage.join(', ') 
+      // Intentar extraer el mensaje específico enviado por el backend.
+      // Soporta los formatos típicos de NestJS ("error"/"message") y el
+      // de las respuestas de n8n ("mensaje", en español).
+      const backendMessage = data?.error || data?.message || data?.mensaje;
+      const formattedMessage = Array.isArray(backendMessage)
+        ? backendMessage.join(', ')
         : backendMessage;
 
       switch (status) {
@@ -76,4 +81,3 @@ apiClient.interceptors.response.use(
 );
 
 export default apiClient;
-

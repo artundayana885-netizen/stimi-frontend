@@ -2,8 +2,25 @@ import { useState, useEffect } from 'react';
 import Toast from '../Toast';
 import { useTheme } from '../../../ThemeContext';
 import { getAllUsers, toggleUserStatus, changeUserRole, deleteUser } from '../../../services/authService';
+import { addHistoryEntry } from './historyLog';
 
 const ROLES = ['Instructor', 'Coordinador'];
+
+const AREAS = [
+  'Gestión Administrativa',
+  'Gestión Empresarial',
+  'Gestión de Mercados',
+  'Contabilidad y Finanzas',
+  'Análisis y Desarrollo de Sistemas de Información',
+  'Gestión de Redes de Datos',
+  'Producción de Multimedia',
+  'Producción Agropecuaria Ecológica',
+  'Agricultura de Precisión',
+  'Control Ambiental',
+  'Gestión de Recursos Naturales',
+  'Guianza Turística',
+  'Gestión de Servicios Turísticos',
+];
 
 /* ---------------------------------------------------------------------
    Set de iconos de línea (reemplaza los emojis) — trazo consistente,
@@ -169,12 +186,13 @@ function ComplianceBar({ value, color, trackColor }) {
   );
 }
 
-const REGISTER_COLORS = ['#16A34A', '#F97316', '#22C55E', '#EA580C', '#65A30D'];
+const REGISTER_COLORS = ['#2E8B00', '#F97316', '#39A900', '#EA580C', '#65A30D'];
 
-export default function UserManagement({ pendingUsers = [], setPendingUsers, onAssignRole, onRejectUser }) {
+export default function UserManagement({ pendingUsers = [], setPendingUsers, onAssignRole, onRejectUser, notifications = [], setNotifications }) {
   const { colors, theme } = useTheme();
   const [dbUsers, setDbUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [areaFilter, setAreaFilter] = useState('');
   const [message, setMessage] = useState('');
   const [toast, setToast] = useState(null);
   const [roleModal, setRoleModal] = useState(null);   // instructor obj
@@ -187,7 +205,7 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
   const [assignRole, setAssignRole] = useState('');
   const [rejectModal, setRejectModal] = useState(null); // registro pendiente obj
 
-  const showToast = (msg, color = '#16a34a') => {
+  const showToast = (msg, color = '#2E8B00') => {
     setToast({ msg, color });
     setTimeout(() => setToast(null), 3000);
   };
@@ -230,14 +248,29 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
 
   const handleAssignRoleToPending = async () => {
     if (!assignRole || !assignModal) return;
+    const roleLabel = assignRole === 'instructor' ? 'Instructor' : 'Coordinador';
     try {
       await changeUserRole(assignModal.id, assignRole);
-      showToast(`Rol de ${assignRole === 'instructor' ? 'Instructor' : 'Coordinador'} asignado a ${assignModal.name}.`);
+      showToast(`Rol de ${roleLabel} asignado a ${assignModal.name}.`);
+      addHistoryEntry({
+        action: 'Rol asignado',
+        detail: `Se asignó el rol de ${roleLabel} a ${assignModal.name} (${assignModal.email})`,
+        by: assignModal.name,
+        type: 'Usuarios',
+        kind: 'approved',
+      });
       setAssignModal(null);
       setAssignRole('');
       fetchUsers();
     } catch (err) {
       showToast(`Error: ${err.message}`, '#ef4444');
+      addHistoryEntry({
+        action: 'Error al asignar rol',
+        detail: `No se pudo asignar el rol de ${roleLabel} a ${assignModal.name}: ${err.message}`,
+        by: assignModal.name,
+        type: 'Usuarios',
+        kind: 'rejected',
+      });
     }
   };
 
@@ -246,35 +279,81 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
     try {
       await deleteUser(rejectModal.id);
       showToast(`Registro de ${rejectModal.name} rechazado`, '#ef4444');
+      addHistoryEntry({
+        action: 'Registro rechazado',
+        detail: `Se rechazó la solicitud de registro de ${rejectModal.name} (${rejectModal.email})`,
+        by: rejectModal.name,
+        type: 'Usuarios',
+        kind: 'rejected',
+      });
       setRejectModal(null);
       fetchUsers();
     } catch (err) {
       showToast(`Error: ${err.message}`, '#ef4444');
+      addHistoryEntry({
+        action: 'Error al rechazar',
+        detail: `No se pudo rechazar el registro de ${rejectModal.name}: ${err.message}`,
+        by: rejectModal.name,
+        type: 'Usuarios',
+        kind: 'rejected',
+      });
     }
   };
 
   const handleChangeRole = async () => {
+    const previousRole = roleModal.role;
     try {
       await changeUserRole(roleModal.id, selectedRole.toLowerCase());
       showToast(`Rol de ${roleModal.name} cambiado a ${selectedRole}`);
+      addHistoryEntry({
+        action: 'Rol cambiado',
+        detail: `El rol de ${roleModal.name} cambió de ${previousRole} a ${selectedRole}`,
+        by: roleModal.name,
+        type: 'Usuarios',
+        kind: 'system',
+      });
       setRoleModal(null);
       fetchUsers();
     } catch (err) {
       showToast(`Error: ${err.message}`, '#ef4444');
+      addHistoryEntry({
+        action: 'Error al cambiar rol',
+        detail: `No se pudo cambiar el rol de ${roleModal.name} a ${selectedRole}: ${err.message}`,
+        by: roleModal.name,
+        type: 'Usuarios',
+        kind: 'rejected',
+      });
     }
   };
 
   const handleToggleStatus = async () => {
+    const wasActive = statusModal.active !== false;
     try {
       await toggleUserStatus(statusModal.id);
       showToast(
-        statusModal.active ? `${statusModal.name} fue desactivado` : `${statusModal.name} fue activado de nuevo`,
-        statusModal.active ? '#ef4444' : '#16a34a'
+        wasActive ? `${statusModal.name} fue desactivado` : `${statusModal.name} fue activado de nuevo`,
+        wasActive ? '#ef4444' : '#2E8B00'
       );
+      addHistoryEntry({
+        action: wasActive ? 'Usuario desactivado' : 'Usuario activado',
+        detail: wasActive
+          ? `${statusModal.name} (${statusModal.email}) fue desactivado`
+          : `${statusModal.name} (${statusModal.email}) fue reactivado`,
+        by: statusModal.name,
+        type: 'Usuarios',
+        kind: wasActive ? 'rejected' : 'approved',
+      });
       setStatusModal(null);
       fetchUsers();
     } catch (err) {
       showToast(`Error: ${err.message}`, '#ef4444');
+      addHistoryEntry({
+        action: 'Error al cambiar estado',
+        detail: `No se pudo ${wasActive ? 'desactivar' : 'activar'} a ${statusModal.name}: ${err.message}`,
+        by: statusModal.name,
+        type: 'Usuarios',
+        kind: 'rejected',
+      });
     }
   };
 
@@ -282,16 +361,40 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
     try {
       await deleteUser(deleteModal.id);
       showToast(`${deleteModal.name} eliminado del sistema`, '#ef4444');
+      addHistoryEntry({
+        action: 'Usuario eliminado',
+        detail: `${deleteModal.name} (${deleteModal.email}) fue eliminado del sistema`,
+        by: deleteModal.name,
+        type: 'Usuarios',
+        kind: 'rejected',
+      });
       setDeleteModal(null);
       fetchUsers();
     } catch (err) {
       showToast(`Error: ${err.message}`, '#ef4444');
+      addHistoryEntry({
+        action: 'Error al eliminar',
+        detail: `No se pudo eliminar a ${deleteModal.name}: ${err.message}`,
+        by: deleteModal.name,
+        type: 'Usuarios',
+        kind: 'rejected',
+      });
     }
   };
 
+  // CORREGIDO: antes esta función escribía directamente en localStorage bajo
+  // la clave 'sena_notifications' (una clave distinta a la que realmente lee
+  // el sidebar/las vistas). Nunca tocaba el estado React `notifications`, así
+  // que el badge de la campana jamás se enteraba de estas notificaciones.
+  // Ahora actualiza el estado compartido `notifications` vía `setNotifications`,
+  // que es la misma fuente que usa CoordinatorDashboard para calcular el
+  // contador de no leídas y que usa la vista de Notificaciones para mostrarlas.
   const handleMassNotify = () => {
     if (!message.trim()) return;
-    const saved = JSON.parse(localStorage.getItem('sena_notifications') || '[]');
+    if (typeof setNotifications !== 'function') {
+      showToast('No se pudo enviar: falta conectar el estado de notificaciones', '#ef4444');
+      return;
+    }
     const now = new Date();
     const dateStr = now.toLocaleDateString('es-CO');
     const timeStr = now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
@@ -303,23 +406,32 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
       date: dateStr,
       read: false
     };
-    saved.unshift(newNotif);
-    localStorage.setItem('sena_notifications', JSON.stringify(saved));
+    setNotifications(prev => [newNotif, ...(prev || [])]);
     showToast('Notificación enviada a todos los instructores');
+    addHistoryEntry({
+      action: 'Notificación masiva enviada',
+      detail: `"${message}" — enviada a ${allInstructors.length} instructor${allInstructors.length !== 1 ? 'es' : ''}`,
+      type: 'Notificaciones',
+      kind: 'system',
+    });
     setMessage('');
   };
 
-  const filtered = allInstructors.filter((i) =>
-    i.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    i.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Filtro combinado: nombre (texto libre) + área (select). Ambos deben
+  // cumplirse a la vez; si el select de área está vacío ("Todas las áreas")
+  // no restringe nada.
+  const filtered = allInstructors.filter((i) => {
+    const matchesName = i.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesArea = areaFilter === '' || i.area === areaFilter;
+    return matchesName && matchesArea;
+  });
 
   // Solo se promedian los instructores que ya tienen un cumplimiento real registrado.
   const withCompliance = allInstructors.filter(i => i.compliance !== null && i.compliance !== undefined);
 
   const stats = [
-    { label: 'Total Instructores',   value: allInstructors.length, Icon: IconUsers, color: '#16A34A', bg: theme === 'dark' ? 'rgba(22,163,74,0.15)' : '#F0FDF4' },
-    { label: 'Activos',              value: allInstructors.filter(i => i.active !== false).length, Icon: IconCheckCircle, color: '#22C55E', bg: theme === 'dark' ? 'rgba(34,197,94,0.15)' : '#F0FDF4' },
+    { label: 'Total Instructores',   value: allInstructors.length, Icon: IconUsers, color: '#2E8B00', bg: theme === 'dark' ? 'rgba(22,163,74,0.15)' : '#F0FDF4' },
+    { label: 'Activos',              value: allInstructors.filter(i => i.active !== false).length, Icon: IconCheckCircle, color: '#39A900', bg: theme === 'dark' ? 'rgba(34,197,94,0.15)' : '#F0FDF4' },
     { label: 'Inactivos',            value: allInstructors.filter(i => i.active === false).length, Icon: IconBan, color: '#ef4444', bg: theme === 'dark' ? 'rgba(239,68,68,0.15)' : '#FEF2F2' },
     { label: 'Cumplimiento Promedio',value: withCompliance.length ? Math.round(withCompliance.reduce((s, i) => s + i.compliance, 0) / withCompliance.length) + '%' : '—', Icon: IconTarget, color: '#F97316', bg: theme === 'dark' ? 'rgba(249,115,22,0.15)' : '#FFF7ED' },
     { label: 'Pendientes de rol',    value: pendingApproval.length, Icon: IconClock, color: '#EA580C', bg: theme === 'dark' ? 'rgba(234,88,12,0.15)' : '#FFF7ED' },
@@ -342,9 +454,9 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
             {ROLES.map(r => (
               <button key={r} onClick={() => setSelectedRole(r)} style={{
                 padding: '10px 16px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
-                border: selectedRole === r ? '2px solid #22C55E' : `1px solid ${colors.border}`,
+                border: selectedRole === r ? '2px solid #39A900' : `1px solid ${colors.border}`,
                 background: selectedRole === r ? (theme === 'dark' ? 'rgba(34,197,94,0.12)' : '#F0FDF4') : colors.inputBg,
-                color: selectedRole === r ? '#15803D' : colors.textSecondary,
+                color: selectedRole === r ? '#256F00' : colors.textSecondary,
                 fontSize: 14, fontWeight: selectedRole === r ? 700 : 400,
               }}>{r}</button>
             ))}
@@ -355,7 +467,7 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
             label="Confirmar Cambio"
             onClick={handleChangeRole}
             disabled={!selectedRole || selectedRole === roleModal.role}
-            bg="linear-gradient(135deg, #22C55E, #16A34A)"
+            bg="linear-gradient(135deg, #39A900, #2E8B00)"
             color="#fff"
           />
         </Modal>
@@ -382,7 +494,7 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
               icon={statusModal.active !== false ? <IconBan size={16} color="#fff" /> : <IconCheckCircle size={16} color="#fff" />}
               label={statusModal.active !== false ? 'Sí, Desactivar' : 'Sí, Activar'}
               onClick={handleToggleStatus}
-              bg={statusModal.active !== false ? 'linear-gradient(135deg, #F97316, #EA580C)' : 'linear-gradient(135deg, #22c55e, #16a34a)'}
+              bg={statusModal.active !== false ? 'linear-gradient(135deg, #F97316, #EA580C)' : 'linear-gradient(135deg, #39A900, #2E8B00)'}
               color="#fff"
             />
           </div>
@@ -439,7 +551,7 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
             label="Activar cuenta con este rol"
             onClick={handleAssignRoleToPending}
             disabled={!assignRole}
-            bg="linear-gradient(135deg, #22c55e, #16a34a)"
+            bg="linear-gradient(135deg, #39A900, #2E8B00)"
             color="#fff"
           />
         </Modal>
@@ -467,79 +579,71 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
         </Modal>
       )}
 
-      {/* Banner — verde fresco con un brote (sprout) como guiño a "formación/crecimiento" */}
+      {/* Banner */}
       <div className="coord-banner" style={{
-        background: 'linear-gradient(135deg, #22C55E 0%, #15803D 100%)',
-        borderRadius: 16, padding: '24px 28px', marginBottom: 24, color: '#fff',
+        background: 'linear-gradient(120deg, #2E8B00 0%, #1F6600 100%)',
+        borderRadius: 18, padding: '26px 30px', marginBottom: 22, color: '#fff',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         position: 'relative', overflow: 'hidden',
+        boxShadow: '0 8px 24px rgba(31,102,0,0.18)',
       }}>
-        <div style={{ position: 'absolute', right: -20, top: -30, width: 140, height: 140, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
-        <div style={{ position: 'absolute', right: 24, bottom: -10, opacity: 0.16, transform: 'scale(2.6) rotate(8deg)' }}>
-          <SproutIcon size={40} color="#fff" />
+        <div style={{ position: 'absolute', right: -30, top: -40, width: 160, height: 160, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
+        <div style={{ position: 'absolute', right: 28, bottom: -8, opacity: 0.14, transform: 'scale(2.3) rotate(6deg)' }}>
+          <SproutIcon size={38} color="#fff" />
         </div>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <IconBox bg="rgba(255,255,255,0.2)" size={28} radius={8}>
-              <IconUsers size={15} color="#fff" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <IconBox bg="rgba(255,255,255,0.16)" size={26} radius={8}>
+              <IconUsers size={14} color="#fff" />
             </IconBox>
-            <span style={{ fontSize: 13, opacity: 0.9, fontWeight: 500 }}>Administración de Personal</span>
+            <span style={{ fontSize: 12.5, opacity: 0.85, fontWeight: 500, letterSpacing: '0.3px' }}>Administración de Personal</span>
           </div>
-          <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700, letterSpacing: '-0.4px' }}>Gestión de Usuarios</h1>
-          <p style={{ margin: 0, fontSize: 13, opacity: 0.85 }}>Administra instructores y envía notificaciones</p>
+          <h1 style={{ margin: '0 0 4px', fontSize: 23, fontWeight: 700, letterSpacing: '-0.4px' }}>Gestión de Usuarios</h1>
+          <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>Administra instructores y envía notificaciones</p>
         </div>
       </div>
 
       {/* Notificación Masiva */}
-      <div style={{ background: noticeBg, borderRadius: 14, padding: '16px 20px', marginBottom: 20, border: `1px solid ${noticeBorder}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <IconBox bg="#EA580C" size={28} radius={8}>
-            <IconMail size={15} color="#fff" />
+      <div style={{ background: colors.card, borderRadius: 16, padding: '18px 22px', marginBottom: 22, border: `1px solid ${colors.border}`, borderLeft: '3px solid #EA580C', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <IconBox bg={theme === 'dark' ? 'rgba(234,88,12,0.15)' : '#FFF7ED'} size={26} radius={8}>
+            <IconMail size={14} color="#EA580C" />
           </IconBox>
-          <span style={{ fontWeight: 600, fontSize: 14, color: theme === 'dark' ? '#fdba74' : '#C2410C' }}>Enviar Notificación Masiva</span>
+          <span style={{ fontWeight: 600, fontSize: 14, color: colors.text }}>Enviar Notificación Masiva</span>
         </div>
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           placeholder="Escribe aquí el mensaje que deseas enviar a todos los instructores..."
           style={{
-            width: '100%', boxSizing: 'border-box', padding: '10px 14px', borderRadius: 10,
-            border: `1px solid ${noticeBorder}`, background: colors.inputBg, fontSize: 13, color: colors.text,
+            width: '100%', boxSizing: 'border-box', padding: '11px 14px', borderRadius: 10,
+            border: `1px solid ${colors.border}`, background: colors.inputBg, fontSize: 13, color: colors.text,
             outline: 'none', resize: 'vertical', minHeight: 60, fontFamily: 'inherit',
           }}
         />
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 12 }}>
           <IconButton
             icon={<IconMail size={15} color="#fff" />}
             label={`Enviar a Todos (${allInstructors.length} Instructores)`}
             onClick={handleMassNotify}
-            bg="linear-gradient(135deg, #FB923C, #EA580C)"
+            bg="linear-gradient(135deg, #F97316, #C2410C)"
             color="#fff"
           />
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="coord-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14, marginBottom: 20 }}>
-        {stats.map((s) => (
-          <div key={s.label} style={{ background: colors.card, borderRadius: 12, padding: '16px', border: `1px solid ${colors.border}`, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-            <IconBox bg={s.bg}>
-              <s.Icon size={19} color={s.color} />
-            </IconBox>
-            <div style={{ fontSize: 24, fontWeight: 700, color: s.color, letterSpacing: '-0.5px', marginTop: 10 }}>{s.value}</div>
-            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 3 }}>{s.label}</div>
-          </div>
-        ))}
+      {/* Buscar y filtrar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <div style={{ width: 3, height: 14, borderRadius: 2, background: '#2E8B00' }} />
+        <span style={{ fontWeight: 600, fontSize: 12.5, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Buscar y Filtrar</span>
       </div>
-
-      {/* Search */}
-      <div style={{ background: colors.card, borderRadius: 14, padding: '14px 18px', marginBottom: 16, border: `1px solid ${colors.border}` }}>
-        <div style={{ position: 'relative' }}>
+      <div style={{ background: colors.card, borderRadius: 14, padding: '14px 18px', marginBottom: 26, border: `1px solid ${colors.border}`, display: 'flex', gap: 12, flexWrap: 'wrap', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 220 }}>
           <svg style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={colors.textFaint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
           <input
-            placeholder="Buscar instructor por nombre o correo..."
+            placeholder="Buscar instructor por nombre..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{
@@ -549,17 +653,55 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
             }}
           />
         </div>
+
+        <select
+          value={areaFilter}
+          onChange={(e) => setAreaFilter(e.target.value)}
+          style={{
+            padding: '10px 12px', borderRadius: 10, border: `1px solid ${colors.border}`,
+            fontSize: 14, background: colors.inputBg, color: colors.text, minWidth: 220,
+          }}
+        >
+          <option value="">Todas las áreas</option>
+          {AREAS.map((a) => (
+            <option key={a} value={a}>{a}</option>
+          ))}
+        </select>
       </div>
 
-      <div style={{ fontWeight: 600, fontSize: 14, color: colors.textSecondary, marginBottom: 12 }}>Lista de Instructores</div>
+      {/* Resumen general */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <div style={{ width: 3, height: 14, borderRadius: 2, background: '#2E8B00' }} />
+        <span style={{ fontWeight: 600, fontSize: 12.5, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Resumen General</span>
+      </div>
+
+      {/* Stats */}
+      <div className="coord-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14, marginBottom: 26 }}>
+        {stats.map((s) => (
+          <div key={s.label} style={{ background: colors.card, borderRadius: 12, padding: '16px', border: `1px solid ${colors.border}`, boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+            <IconBox bg={s.bg}>
+              <s.Icon size={19} color={s.color} />
+            </IconBox>
+            <div style={{ fontSize: 24, fontWeight: 700, color: s.color, letterSpacing: '-0.5px', marginTop: 10 }}>{s.value}</div>
+            <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 3 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Lista de instructores */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <div style={{ width: 3, height: 14, borderRadius: 2, background: '#2E8B00' }} />
+        <span style={{ fontWeight: 600, fontSize: 12.5, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Lista de Instructores</span>
+        <span style={{ fontSize: 12, color: colors.textFaint, fontWeight: 500 }}>({filtered.length})</span>
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {filtered.map((inst) => {
           const hasCompliance = inst.compliance !== null && inst.compliance !== undefined;
-          const compColor = !hasCompliance ? colors.textFaint : inst.compliance >= 90 ? '#16A34A' : inst.compliance >= 80 ? '#F97316' : '#ef4444';
+          const compColor = !hasCompliance ? colors.textFaint : inst.compliance >= 90 ? '#2E8B00' : inst.compliance >= 80 ? '#F97316' : '#ef4444';
           return (
             <div key={inst.id} style={{
               background: colors.card, borderRadius: 14, padding: '16px 20px',
-              border: `1px solid ${colors.border}`, boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+              border: `1px solid ${colors.border}`, boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
               display: 'flex', alignItems: 'center', gap: 14, transition: 'box-shadow .15s, opacity .15s', flexWrap: 'wrap',
               opacity: inst.active === false ? 0.6 : 1,
             }}
@@ -576,7 +718,7 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
               <div style={{ flex: 1, minWidth: 120 }}>
                 <div style={{ fontWeight: 600, fontSize: 14, color: colors.text }}>
                   {inst.name}
-                  <span style={{ marginLeft: 8, fontSize: 11, padding: '2px 8px', borderRadius: 6, background: theme === 'dark' ? 'rgba(22,163,74,0.15)' : '#F0FDF4', color: theme === 'dark' ? '#86efac' : '#15803D', fontWeight: 600 }}>{inst.role}</span>
+                  <span style={{ marginLeft: 8, fontSize: 11, padding: '2px 8px', borderRadius: 6, background: theme === 'dark' ? 'rgba(22,163,74,0.15)' : '#F0FDF4', color: theme === 'dark' ? '#86efac' : '#256F00', fontWeight: 600 }}>{inst.role}</span>
                   {inst.active === false && (
                     <span style={{ marginLeft: 6, fontSize: 11, padding: '2px 8px', borderRadius: 6, background: theme === 'dark' ? 'rgba(239,68,68,0.15)' : '#FEF2F2', color: '#ef4444', fontWeight: 700 }}>Inactivo</span>
                   )}
@@ -597,14 +739,14 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
                   label="Rol"
                   onClick={() => { setRoleModal(inst); setSelectedRole(inst.role); }}
                   bg={theme === 'dark' ? 'rgba(22,163,74,0.15)' : '#F0FDF4'}
-                  color="#16A34A"
+                  color="#2E8B00"
                   hoverBg={theme === 'dark' ? 'rgba(22,163,74,0.25)' : '#DCFCE7'}
                 />
                 <ActionButton
                   label={inst.active === false ? 'Activar' : 'Desactivar'}
                   onClick={() => setStatusModal(inst)}
                   bg={inst.active === false ? (theme === 'dark' ? 'rgba(22,163,74,0.15)' : '#F0FDF4') : noticeBg}
-                  color={inst.active === false ? '#16a34a' : '#EA580C'}
+                  color={inst.active === false ? '#2E8B00' : '#EA580C'}
                   hoverBg={inst.active === false ? (theme === 'dark' ? 'rgba(22,163,74,0.25)' : '#DCFCE7') : (theme === 'dark' ? 'rgba(234,88,12,0.25)' : '#FFEDD5')}
                 />
                 <ActionButton
@@ -621,9 +763,10 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
       </div>
 
       {/* Solicitudes de registro pendientes (debajo de Lista de Instructores) */}
-      <div style={{ marginTop: 28 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <span style={{ fontWeight: 600, fontSize: 14, color: colors.textSecondary }}>Solicitudes de registro pendientes</span>
+      <div style={{ marginTop: 32 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <div style={{ width: 3, height: 14, borderRadius: 2, background: '#EA580C' }} />
+          <span style={{ fontWeight: 600, fontSize: 12.5, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Solicitudes de Registro Pendientes</span>
           {pendingApproval.length > 0 && (
             <span style={{ background: '#EA580C', color: '#fff', borderRadius: 20, fontSize: 11, fontWeight: 700, padding: '2px 9px' }}>
               {pendingApproval.length} pendiente{pendingApproval.length !== 1 ? 's' : ''}
@@ -640,7 +783,7 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
             {pendingApproval.map((u) => (
               <div key={u.id} style={{
                 background: colors.card, borderRadius: 14, padding: '16px 20px',
-                border: `1px solid ${noticeBorder}`, boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                border: `1px solid ${noticeBorder}`, boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
                 display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
               }}>
                 <div style={{
@@ -663,7 +806,7 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
                 <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                   <button onClick={() => { setAssignModal(u); setAssignRole(''); }} style={{
                     padding: '8px 16px', borderRadius: 8, border: 'none',
-                    background: 'linear-gradient(135deg, #22c55e, #16a34a)', color: '#fff',
+                    background: 'linear-gradient(135deg, #39A900, #2E8B00)', color: '#fff',
                     fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
                   }}>Asignar rol</button>
                   <button onClick={() => setRejectModal(u)} style={{

@@ -4,14 +4,26 @@ import apiClient from './apiClient';
  * Inicia sesión de un usuario en el backend.
  * Guarda el perfil en localStorage si el inicio de sesión es exitoso.
  */
+/**
+ * Inicia sesión de un usuario en el backend.
+ * Guarda el perfil en localStorage si el inicio de sesión es exitoso.
+ */
 export async function loginUser(email, password) {
   const { data } = await apiClient.post('/usuario/login', { email, password });
-  
-  const userProfile = data.user; // { name, email, role }
-  
+
+  const userProfile = data.user; // { name, email, role, estado }
+
+  // Si la cuenta existe pero el coordinador aún no la ha aprobado,
+  // bloqueamos el acceso aquí mismo: no guardamos sesión ni token,
+  // y lanzamos un error para que la pantalla de login muestre el aviso.
+  const estado = (userProfile?.estado || '').toString().trim().toLowerCase();
+  if (estado === 'pendiente') {
+    throw new Error('PENDIENTE');
+  }
+
   // Guardamos la sesión localmente
   localStorage.setItem('sena_user', JSON.stringify(userProfile));
-  
+
   // Si en el futuro el backend implementa JWT Token, lo guardamos así:
   if (data.token) {
     localStorage.setItem('sitmi_token', data.token);

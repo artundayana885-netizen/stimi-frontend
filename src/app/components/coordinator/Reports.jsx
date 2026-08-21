@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTheme } from '../../../ThemeContext';
+import { getAllUsers } from '../../../services/authService';
 
 /* ------------------------------------------------------------------ */
 /*  PALETA INSTITUCIONAL SENA                                          */
@@ -96,11 +97,15 @@ function SproutIcon({ size = 16, color = '#fff' }) {
 
 /* ------------------------------------------------------------------ */
 /*  DATOS BASE                                                         */
-/*  ⚠️ TODO: reemplazar con datos reales (API, backend, etc.)          */
 /* ------------------------------------------------------------------ */
 
-// Años disponibles en el selector de filtros
-const YEARS = ['2026', '2027', '2028'];
+const CURRENT_DATE = new Date();
+const CURRENT_YEAR = String(CURRENT_DATE.getFullYear());
+const CURRENT_MONTH_INDEX = CURRENT_DATE.getMonth();
+
+// Años disponibles en el selector de filtros: el actual y los dos siguientes.
+// Solo el año actual tiene datos reales (el resto todavía no ha ocurrido).
+const YEARS = [CURRENT_YEAR, String(Number(CURRENT_YEAR) + 1), String(Number(CURRENT_YEAR) + 2)];
 
 const MONTHS_FULL = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -108,69 +113,75 @@ const MONTHS_FULL = [
 ];
 const MONTHS_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
-// Cantidad de meses del año actual que ya tienen informes cargados (0-12).
-// TODO: calcular/recibir este valor a partir de los datos reales.
-const MONTHS_WITH_DATA = 0;
+// Áreas institucionales (mismas que en Gestión de Usuarios, para que el
+// filtro de área sea consistente en toda la aplicación).
+const AREAS = [
+  'Gestión Administrativa',
+  'Gestión Empresarial',
+  'Gestión de Mercados',
+  'Contabilidad y Finanzas',
+  'Análisis y Desarrollo de Sistemas de Información',
+  'Gestión de Redes de Datos',
+  'Producción de Multimedia',
+  'Producción Agropecuaria Ecológica',
+  'Agricultura de Precisión',
+  'Control Ambiental',
+  'Gestión de Recursos Naturales',
+  'Guianza Turística',
+  'Gestión de Servicios Turísticos',
+];
 
-// Lista de áreas/programas. TODO: reemplazar por las áreas reales.
-const AREAS = [];
+const AREA_COLORS = [SENA.verde, SENA.naranja, '#22C55E', '#EA580C', '#65A30D', SENA.amarillo, SENA.azulOscuro, '#16A34A', '#F97316'];
 
-// Datos por área. Estructura esperada por cada clave de AREAS:
-// {
-//   color: '#RRGGBB',           // color institucional asignado al área
-//   instructors: 0,              // total de instructores del área
-//   pending: 0,                  // informes pendientes
-//   alerts: 0,                   // alertas activas
-//   monthly: [                   // un objeto por cada mes con datos (según MONTHS_WITH_DATA)
-//     { gc: 0, gf: 0 },           // gc = Gestión Contractual %, gf = Gestión Financiera %
-//   ],
-//   topInstructors: [
-//     { name: '', value: 0, initials: '', color: '#RRGGBB', bg: '#RRGGBB' },
-//   ],
-// }
-// TODO: completar con los datos reales de cada área.
-const AREA_DATA = {};
+function initialsOf(name = '') {
+  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+}
 
 /* ------------------------------------------------------------------ */
 /*  HELPERS DE AGREGACIÓN                                              */
+/*  Reciben AREAS/AREA_DATA como parámetro porque ahora se construyen  */
+/*  en tiempo real a partir de los instructores obtenidos del backend. */
 /* ------------------------------------------------------------------ */
 
 function round(n) { return Math.round(n * 10) / 10; }
 
-function getMonthlyForArea(areaKey) {
-  const areas = areaKey === 'Todas las áreas' ? AREAS : [areaKey].filter(a => AREA_DATA[a]);
+function getMonthlyForArea(areaKey, areaList, areaData) {
+  const areas = areaKey === 'Todas las áreas' ? areaList : [areaKey].filter(a => areaData[a]);
   const months = [];
   for (let i = 0; i < 12; i++) {
-    if (i >= MONTHS_WITH_DATA || areas.length === 0) { months.push(null); continue; }
-    let gcSum = 0, gfSum = 0;
-    areas.forEach(a => { gcSum += AREA_DATA[a].monthly[i]?.gc ?? 0; gfSum += AREA_DATA[a].monthly[i]?.gf ?? 0; });
-    months.push({ gc: round(gcSum / areas.length), gf: round(gfSum / areas.length) });
+    if (areas.length === 0) { months.push(null); continue; }
+    let gcSum = 0, gfSum = 0, count = 0;
+    areas.forEach(a => {
+      const m = areaData[a]?.monthly?.[i];
+      if (m) { gcSum += m.gc; gfSum += m.gf; count++; }
+    });
+    months.push(count ? { gc: round(gcSum / count), gf: round(gfSum / count) } : null);
   }
   return months;
 }
 
-function getStatsForArea(areaKey, monthIndex) {
-  const areas = areaKey === 'Todas las áreas' ? AREAS : [areaKey].filter(a => AREA_DATA[a]);
+function getStatsForArea(areaKey, monthIndex, areaList, areaData) {
+  const areas = areaKey === 'Todas las áreas' ? areaList : [areaKey].filter(a => areaData[a]);
 
   if (areas.length === 0) {
     return { instructors: 0, pending: 0, alerts: 0, compliance: null };
   }
 
-  const instructors = areas.reduce((s, a) => s + (AREA_DATA[a].instructors ?? 0), 0);
-  const pending = areas.reduce((s, a) => s + (AREA_DATA[a].pending ?? 0), 0);
-  const alerts = areas.reduce((s, a) => s + (AREA_DATA[a].alerts ?? 0), 0);
+  const instructors = areas.reduce((s, a) => s + (areaData[a].instructors ?? 0), 0);
+  const pending = areas.reduce((s, a) => s + (areaData[a].pending ?? 0), 0);
+  const alerts = areas.reduce((s, a) => s + (areaData[a].alerts ?? 0), 0);
 
   let compliance = null;
   if (monthIndex === null) {
     let total = 0, count = 0;
     areas.forEach(a => {
-      (AREA_DATA[a].monthly || []).forEach(m => { total += (m.gc + m.gf) / 2; count++; });
+      (areaData[a].monthly || []).forEach(m => { if (m) { total += (m.gc + m.gf) / 2; count++; } });
     });
     compliance = count ? round(total / count) : null;
-  } else if (monthIndex < MONTHS_WITH_DATA) {
+  } else {
     let total = 0, count = 0;
     areas.forEach(a => {
-      const m = AREA_DATA[a].monthly?.[monthIndex];
+      const m = areaData[a].monthly?.[monthIndex];
       if (m) { total += (m.gc + m.gf) / 2; count++; }
     });
     compliance = count ? round(total / count) : null;
@@ -179,20 +190,22 @@ function getStatsForArea(areaKey, monthIndex) {
   return { instructors, pending, alerts, compliance };
 }
 
-function getTopInstructorsForArea(areaKey) {
-  const areas = areaKey === 'Todas las áreas' ? AREAS : [areaKey].filter(a => AREA_DATA[a]);
-  const list = areas.flatMap(a => (AREA_DATA[a].topInstructors || []).map(i => ({ ...i, area: a })));
+function getTopInstructorsForArea(areaKey, areaList, areaData) {
+  const areas = areaKey === 'Todas las áreas' ? areaList : [areaKey].filter(a => areaData[a]);
+  const list = areas.flatMap(a => (areaData[a].topInstructors || []).map(i => ({ ...i, area: a })));
   return list.sort((a, b) => b.value - a.value).slice(0, 5);
 }
 
-function getAreaBreakdown() {
-  const totalInstructors = AREAS.reduce((s, a) => s + (AREA_DATA[a]?.instructors ?? 0), 0);
+function getAreaBreakdown(areaList, areaData) {
+  const totalInstructors = areaList.reduce((s, a) => s + (areaData[a]?.instructors ?? 0), 0);
   if (totalInstructors === 0) return [];
-  return AREAS.map(a => ({
-    name: a,
-    value: round(((AREA_DATA[a]?.instructors ?? 0) / totalInstructors) * 100),
-    color: AREA_DATA[a]?.color || SENA.verde,
-  }));
+  return areaList
+    .filter(a => (areaData[a]?.instructors ?? 0) > 0)
+    .map(a => ({
+      name: a,
+      value: round(((areaData[a]?.instructors ?? 0) / totalInstructors) * 100),
+      color: areaData[a]?.color || SENA.verde,
+    }));
 }
 
 /* ------------------------------------------------------------------ */
@@ -201,49 +214,73 @@ function getAreaBreakdown() {
 
 function BarChart({ data, c }) {
   const max = 100;
-  const groupW = Math.max(46, Math.min(70, 480 / Math.max(data.length, 1)));
-  const barW = Math.min(22, (groupW - 8) / 2);
+  const hasAnyData = data.some(d => d.value !== null);
+
+  const marginLeft = 28;
+  const marginRight = 12;
   const chartH = 130;
-  const totalW = data.length * groupW;
+  const plotW = 560; // ancho fijo del área de trazado; el SVG escala al 100% del contenedor
+  const totalW = plotW + marginLeft + marginRight;
+
+  // Con pocos meses (p. ej. un solo mes seleccionado) igual reparte el
+  // ancho fijo del gráfico, así nunca se ve como una barra suelta y cortada.
+  const groupW = plotW / Math.max(data.length, 1);
+  const barW = Math.min(26, (groupW - 10) / 2);
+
+  if (!hasAnyData) {
+    return (
+      <div style={{
+        width: '100%', height: chartH + 26, display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', gap: 6,
+        background: c.inputBg, borderRadius: 10, border: `1px dashed ${c.border}`,
+      }}>
+        <IconBarChart size={22} color={c.textFaint} />
+        <div style={{ fontSize: 12.5, color: c.textFaint, fontWeight: 500 }}>Sin informes registrados para este periodo</div>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ width: '100%', height: chartH + 26, overflow: 'hidden' }}>
+    <div style={{ width: '100%', height: chartH + 26 }}>
       <svg
         width="100%"
         height="100%"
         viewBox={`0 0 ${totalW} ${chartH + 26}`}
         preserveAspectRatio="xMidYMid meet"
       >
-        {[50, 100].map((line) => (
-          <g key={line}>
-            <line x1={0} y1={chartH - (line / max) * chartH} x2={totalW} y2={chartH - (line / max) * chartH} stroke={c.border} strokeWidth={1} />
-            <text x={-4} y={chartH - (line / max) * chartH + 4} textAnchor="end" fontSize={9} fill={c.textFaint}>{line}</text>
-          </g>
-        ))}
-        {data.map((d, i) => {
-          const x = i * groupW + (groupW - (barW * 2 + 4)) / 2;
-          const hasData = d.value !== null;
-          return (
-            <g key={d.month}>
-              {hasData ? (
-                <>
-                  <rect x={x} y={chartH - (d.value.gc / max) * chartH} width={barW} height={(d.value.gc / max) * chartH} fill={SENA.verde} rx={4} />
-                  <rect x={x + barW + 4} y={chartH - (d.value.gf / max) * chartH} width={barW} height={(d.value.gf / max) * chartH} fill={SENA.naranja} rx={4} />
-                </>
-              ) : (
-                <>
-                  <rect x={x} y={chartH - 3} width={barW} height={3} fill={c.border} rx={2} />
-                  <rect x={x + barW + 4} y={chartH - 3} width={barW} height={3} fill={c.border} rx={2} />
-                </>
-              )}
-              <text x={x + barW} y={chartH + 16} textAnchor="middle" fontSize={9} fill={c.textFaint}>{d.month}</text>
+        <g transform={`translate(${marginLeft}, 0)`}>
+          {[0, 50, 100].map((line) => (
+            <g key={line}>
+              <line x1={0} y1={chartH - (line / max) * chartH} x2={plotW} y2={chartH - (line / max) * chartH} stroke={c.border} strokeWidth={1} />
+              <text x={-8} y={chartH - (line / max) * chartH + 3} textAnchor="end" fontSize={9} fill={c.textFaint}>{line}</text>
             </g>
-          );
-        })}
+          ))}
+          {data.map((d, i) => {
+            const x = i * groupW + (groupW - (barW * 2 + 4)) / 2;
+            const hasData = d.value !== null;
+            return (
+              <g key={d.month}>
+                {hasData ? (
+                  <>
+                    <rect x={x} y={chartH - (d.value.gc / max) * chartH} width={barW} height={Math.max((d.value.gc / max) * chartH, 2)} fill={SENA.verde} rx={4} />
+                    <rect x={x + barW + 4} y={chartH - (d.value.gf / max) * chartH} width={barW} height={Math.max((d.value.gf / max) * chartH, 2)} fill={SENA.naranja} rx={4} />
+                  </>
+                ) : (
+                  <>
+                    <rect x={x} y={chartH - 2} width={barW} height={2} fill={c.border} rx={1} />
+                    <rect x={x + barW + 4} y={chartH - 2} width={barW} height={2} fill={c.border} rx={1} />
+                  </>
+                )}
+                <text x={x + barW} y={chartH + 16} textAnchor="middle" fontSize={9.5} fontWeight={500} fill={c.textMuted}>{d.month}</text>
+              </g>
+            );
+          })}
+        </g>
       </svg>
     </div>
   );
 }
+
 
 function DonutChart({ data, centerLabel, centerValue, c }) {
   const total = data.reduce((s, d) => s + d.value, 0);
@@ -281,7 +318,7 @@ function DonutChart({ data, centerLabel, centerValue, c }) {
         <text x={cx} y={cy - 3} textAnchor="middle" fontSize={14} fontWeight={700} fill={c.text}>{centerValue}</text>
         <text x={cx} y={cy + 12} textAnchor="middle" fontSize={9} fill={c.textFaint}>{centerLabel}</text>
       </svg>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 140, overflowY: 'auto' }}>
         {data.map((d) => (
           <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
             <div style={{ width: 8, height: 8, borderRadius: 2, background: d.color, flexShrink: 0 }} />
@@ -301,17 +338,78 @@ function DonutChart({ data, centerLabel, centerValue, c }) {
 export default function Reports() {
   const { colors: c } = useTheme();
 
-  const [year, setYear] = useState(YEARS[0] || '');
+  const [dbUsers, setDbUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const [year, setYear] = useState(YEARS[0]);
   const [monthLabel, setMonthLabel] = useState('Todos los meses');
   const [area, setArea] = useState('Todas las áreas');
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await getAllUsers();
+        setDbUsers(data || []);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
   const monthIndex = monthLabel === 'Todos los meses' ? null : MONTHS_FULL.indexOf(monthLabel);
 
-  // TODO: reemplazar esta condición por la lógica real que determine
-  // si el año seleccionado ya tiene informes cargados.
-  const yearHasData = AREAS.length > 0 && MONTHS_WITH_DATA > 0;
+  // Solo se cuentan los usuarios con rol asignado (no las solicitudes
+  // pendientes de aprobación) y con cuenta activa.
+  const instructorsList = useMemo(() => (
+    dbUsers
+      .filter(u => u.estado !== 'Pendiente')
+      .map(u => ({
+        name: u.name,
+        area: u.area || 'Sin asignar',
+        compliance: u.compliance ?? null,
+        active: u.active,
+      }))
+  ), [dbUsers]);
 
-  const monthlyRaw = useMemo(() => getMonthlyForArea(area), [area]);
+  // Construye AREA_DATA en tiempo real a partir de los instructores reales.
+  // Como el backend aún no expone un histórico mensual de Gestión
+  // Contractual (GC) / Gestión Financiera (GF), el cumplimiento actual de
+  // cada instructor se registra en el mes en curso; los demás meses
+  // quedan sin datos hasta que existan informes históricos.
+  const areaData = useMemo(() => {
+    const data = {};
+    AREAS.forEach((a, idx) => {
+      const inArea = instructorsList.filter(i => i.area === a && i.active !== false);
+      const withCompliance = inArea.filter(i => i.compliance !== null);
+      const avgCompliance = withCompliance.length
+        ? round(withCompliance.reduce((s, i) => s + i.compliance, 0) / withCompliance.length)
+        : null;
+
+      const monthly = Array(12).fill(null);
+      if (avgCompliance !== null) monthly[CURRENT_MONTH_INDEX] = { gc: avgCompliance, gf: avgCompliance };
+
+      const color = AREA_COLORS[idx % AREA_COLORS.length];
+
+      data[a] = {
+        color,
+        instructors: inArea.length,
+        pending: inArea.filter(i => i.compliance === null).length,
+        alerts: withCompliance.filter(i => i.compliance < 80).length,
+        monthly,
+        topInstructors: withCompliance
+          .sort((x, y) => y.compliance - x.compliance)
+          .slice(0, 5)
+          .map(i => ({ name: i.name, value: i.compliance, initials: initialsOf(i.name), color, bg: color })),
+      };
+    });
+    return data;
+  }, [instructorsList]);
+
+  const yearHasData = !loading && year === CURRENT_YEAR && instructorsList.length > 0;
+
+  const monthlyRaw = useMemo(() => getMonthlyForArea(area, AREAS, areaData), [area, areaData]);
   const chartData = useMemo(() => {
     if (monthIndex === null) {
       return MONTHS_SHORT.map((m, i) => ({ month: m, value: monthlyRaw[i] }));
@@ -319,9 +417,9 @@ export default function Reports() {
     return [{ month: MONTHS_SHORT[monthIndex], value: monthlyRaw[monthIndex] }];
   }, [monthlyRaw, monthIndex]);
 
-  const stats = useMemo(() => getStatsForArea(area, monthIndex), [area, monthIndex]);
-  const topInstructors = useMemo(() => getTopInstructorsForArea(area), [area]);
-  const areaBreakdown = useMemo(() => getAreaBreakdown(), []);
+  const stats = useMemo(() => getStatsForArea(area, monthIndex, AREAS, areaData), [area, monthIndex, areaData]);
+  const topInstructors = useMemo(() => getTopInstructorsForArea(area, AREAS, areaData), [area, areaData]);
+  const areaBreakdown = useMemo(() => getAreaBreakdown(AREAS, areaData), [areaData]);
 
   // No debe ser posible exportar nada mientras no haya informes cargados
   // para el año/filtros seleccionados: sin esta guarda, el botón generaba
@@ -413,7 +511,7 @@ export default function Reports() {
       </div>
 
       {/* Filtros */}
-      <div className="coord-filters" style={{ background: c.card, borderRadius: 14, padding: '14px 18px', marginBottom: 20, border: `1px solid ${c.border}`, display: 'flex', gap: 10, alignItems: 'center' }}>
+      <div className="coord-filters" style={{ background: c.card, borderRadius: 14, padding: '14px 18px', marginBottom: 20, border: `1px solid ${c.border}`, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <select value={year} onChange={(e) => setYear(e.target.value)} style={sel}>
           {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
@@ -425,7 +523,6 @@ export default function Reports() {
           <option>Todas las áreas</option>
           {AREAS.map(a => <option key={a}>{a}</option>)}
         </select>
-        <select style={sel}><option>Todos</option></select>
       </div>
 
       {!yearHasData ? (
@@ -433,8 +530,12 @@ export default function Reports() {
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
             <IconCalendar size={30} color={c.textFaint} />
           </div>
-          <div style={{ fontWeight: 600, fontSize: 15, color: c.text, marginBottom: 4 }}>Aún no hay informes para {year}</div>
-          <div style={{ fontSize: 13 }}>Los datos de este año todavía no están disponibles.</div>
+          <div style={{ fontWeight: 600, fontSize: 15, color: c.text, marginBottom: 4 }}>
+            {loading ? 'Cargando informes…' : `Aún no hay informes para ${year}`}
+          </div>
+          <div style={{ fontSize: 13 }}>
+            {loading ? 'Obteniendo los datos de instructores.' : 'Los datos de este año todavía no están disponibles.'}
+          </div>
         </div>
       ) : (
         <>
@@ -503,7 +604,7 @@ export default function Reports() {
               )}
               {topInstructors.map((inst) => (
                 <div key={inst.name} className="coord-instructor-row" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 10, background: inst.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: inst.color, flexShrink: 0 }}>{inst.initials}</div>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: inst.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 }}>{inst.initials}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 600, color: c.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{inst.name}</div>
                     <div style={{ fontSize: 11, color: c.textFaint }}>{inst.area}</div>

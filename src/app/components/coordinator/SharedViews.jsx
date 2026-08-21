@@ -26,29 +26,66 @@ const IconXCircle = (p) => <Icon {...p}><circle cx="12" cy="12" r="10" /><line x
 const IconEye = (p) => <Icon {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></Icon>;
 const IconEyeOff = (p) => <Icon {...p}><path d="M17.94 17.94A10.94 10.94 0 0112 20c-7 0-11-8-11-8a21.27 21.27 0 015.06-6.06M9.9 4.24A10.94 10.94 0 0112 4c7 0 11 8 11 8a21.27 21.27 0 01-2.16 3.19" /><path d="M14.12 14.12a3 3 0 11-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></Icon>;
 const IconShieldCheck = (p) => <Icon {...p}><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z" /><polyline points="9 12 11 14 15 10" /></Icon>;
-const IconTrash = (p) => <Icon {...p}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a2 2 0 012-2h2a2 2 0 012 2v2" /></Icon>;
+const IconEdit = (p) => <Icon {...p}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></Icon>;
+const IconSave = (p) => <Icon {...p}><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></Icon>;
+const IconX = (p) => <Icon {...p}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></Icon>;
+const IconBuilding = (p) => <Icon {...p}><rect x="4" y="2" width="16" height="20" rx="1" /><line x1="9" y1="7" x2="9" y2="7.01" /><line x1="15" y1="7" x2="15" y2="7.01" /><line x1="9" y1="11" x2="9" y2="11.01" /><line x1="15" y1="11" x2="15" y2="11.01" /><line x1="9" y1="15" x2="9" y2="15.01" /><line x1="15" y1="15" x2="15" y2="15.01" /></Icon>;
 
 /* ============================================================
    Paleta institucional SENA vigente (Manual de Identidad Visual
    2022-2026, actualizado por Resolución 1825 de 2024)
-   Verde institucional:   #39A900  (color oficial del logosímbolo)
-   Verde oscuro:          #007832  (secundario)
-   Naranja institucional: #FC7323  (Manual de Imagen Corporativa 2012,
-                                     sigue en uso como color complementario)
-   Las variantes Dark/Mid/Soft son ajustes tonales de estos dos colores
-   oficiales (verde y naranja) para dar jerarquía visual — no son
-   colores nuevos, son tintas del mismo verde/naranja institucional.
    ============================================================ */
 const BRAND = {
-  greenDark: '#007832',   // Verde oscuro institucional SENA
-  green: '#1F9B0A',       // tono de transición entre verde oscuro y verde institucional
-  greenMid: '#39A900',    // Verde institucional SENA (color principal)
-  greenSoft: '#6BC93A',   // tinta clara del verde institucional
-  orange: '#D4571A',      // tono oscuro del naranja institucional
-  orangeMid: '#FC7323',   // Naranja institucional SENA
-  orangeSoft: '#FD9257',  // tinta clara del naranja institucional
+  greenDark: '#007832',
+  green: '#1F9B0A',
+  greenMid: '#39A900',
+  greenSoft: '#6BC93A',
+  orange: '#D4571A',
+  orangeMid: '#FC7323',
+  orangeSoft: '#FD9257',
   danger: '#dc2626',
 };
+
+/* ============================================================
+   REGISTRO DE HISTORIAL — cualquier acción que el usuario haga
+   en el panel se guarda aquí y aparece en HistoryView en tiempo
+   real (misma pestaña y otras pestañas abiertas).
+   ============================================================ */
+const HISTORY_KEY = 'sena_history';
+const HISTORY_EVENT = 'sena-history-updated';
+
+/**
+ * Registra un movimiento del usuario en el historial.
+ * kind: 'approved' | 'rejected' | 'system'  -> controla el color/ícono en HistoryView
+ * type: etiqueta corta que se muestra como "chip" (ej: 'Perfil', 'Seguridad', 'Notificaciones', 'Informes')
+ *
+ * EXPORTADA para poder llamarla desde otros componentes del panel de
+ * coordinador (ej. ReportManagement.jsx al aprobar/rechazar un informe).
+ */
+export function addHistoryEntry({ action, detail, by, type = 'Sistema', kind = 'system' }) {
+  try {
+    const existing = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    const now = new Date();
+    const entry = {
+      id: `h_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      action,
+      detail,
+      by: by || 'Tú',
+      type,
+      kind,
+      month: now.toLocaleDateString('es-CO', { month: 'long' }),
+      date: now.toLocaleString('es-CO', {
+        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      }),
+    };
+    const updated = [entry, ...existing];
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+    // Avisa a cualquier HistoryView montado (misma pestaña) que hay un cambio.
+    window.dispatchEvent(new Event(HISTORY_EVENT));
+  } catch (err) {
+    console.error('No se pudo registrar el movimiento en el historial', err);
+  }
+}
 
 function Banner({ eyebrow, title, subtitle, icon }) {
   return (
@@ -82,8 +119,6 @@ function useNotifStyle(theme) {
   };
 }
 
-// Antes tenía notificaciones de ejemplo (FALLBACK_NOTIFICATIONS).
-// Se vació para que solo se muestren notificaciones reales.
 const FALLBACK_NOTIFICATIONS = [];
 
 export function Notifications({ notifications: externalNotifications, setNotifications: setExternalNotifications }) {
@@ -103,8 +138,19 @@ export function Notifications({ notifications: externalNotifications, setNotific
   }, [notifications]);
 
   const unread = notifications.filter(n => !n.read).length;
-  const markOne = (id) => setNotifications(notifications.map(n => n.id === id ? { ...n, read: true } : n));
-  const deleteOne = (id) => setNotifications(notifications.filter(n => n.id !== id));
+
+  const markOne = (id) => {
+    const target = notifications.find(n => n.id === id);
+    setNotifications(notifications.map(n => n.id === id ? { ...n, read: true } : n));
+    if (target) {
+      addHistoryEntry({
+        action: 'Notificación leída',
+        detail: target.title || target.message || 'Notificación marcada como leída',
+        type: 'Notificaciones',
+        kind: 'system',
+      });
+    }
+  };
 
   const shown = notifications.filter(n =>
     filter === 'Todas' ? true : filter === 'No leídas' ? !n.read : n.type === 'danger'
@@ -114,7 +160,6 @@ export function Notifications({ notifications: externalNotifications, setNotific
     <div style={{ fontFamily: "'Inter', 'Segoe UI', sans-serif", color: colors.text }}>
       <Banner eyebrow="Centro de notificaciones" title="Notificaciones" subtitle="Alertas y actualizaciones del sistema para tu unidad" icon={<IconBell size={17} />} />
 
-      {/* Tabs */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         {['Todas', 'No leídas', 'Alertas'].map((t) => (
           <button key={t} onClick={() => setFilter(t)} style={{
@@ -132,7 +177,6 @@ export function Notifications({ notifications: externalNotifications, setNotific
         ))}
       </div>
 
-      {/* Lista */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {shown.length === 0 && (
           <div style={{ padding: '36px 20px', textAlign: 'center', color: colors.textMuted, fontSize: 13.5, background: colors.card, borderRadius: 14, border: `1px solid ${colors.border}` }}>
@@ -166,14 +210,6 @@ export function Notifications({ notifications: externalNotifications, setNotific
                       Marcar como leída
                     </button>
                   )}
-                  <button
-                    onClick={() => deleteOne(n.id)}
-                    title="Eliminar notificación"
-                    style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: BRAND.danger, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}
-                  >
-                    <IconTrash size={13} />
-                    Eliminar
-                  </button>
                   <span style={{ fontSize: 11, color: colors.textFaint, marginLeft: 'auto' }}>{n.date}</span>
                 </div>
               </div>
@@ -186,7 +222,8 @@ export function Notifications({ notifications: externalNotifications, setNotific
 }
 
 /* ============================================================
-   HISTORIAL
+   HISTORIAL — ahora se mantiene sincronizado en vivo con
+   addHistoryEntry(), incluyendo cambios hechos en otras pestañas.
    ============================================================ */
 function useHistoryStyle(theme) {
   return {
@@ -196,16 +233,30 @@ function useHistoryStyle(theme) {
   };
 }
 
+function loadHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
 export function HistoryView() {
   const { colors, theme } = useTheme();
   const HISTORY_STYLE = useHistoryStyle(theme);
-  const [historyItems] = useState(() => {
-    const saved = JSON.parse(localStorage.getItem('sena_history') || '[]');
-    // Antes tenía un historial de ejemplo (defaultHistory).
-    // Se vació para que solo se muestre historial real.
-    const defaultHistory = [];
-    return saved.length > 0 ? saved : defaultHistory;
-  });
+  const [historyItems, setHistoryItems] = useState(loadHistory);
+
+  useEffect(() => {
+    const reload = () => setHistoryItems(loadHistory());
+    // Se dispara cuando addHistoryEntry() se llama en esta misma pestaña...
+    window.addEventListener(HISTORY_EVENT, reload);
+    // ...y esto cubre cambios hechos en otras pestañas del mismo navegador.
+    window.addEventListener('storage', reload);
+    return () => {
+      window.removeEventListener(HISTORY_EVENT, reload);
+      window.removeEventListener('storage', reload);
+    };
+  }, []);
 
   return (
     <div style={{ fontFamily: "'Inter', 'Segoe UI', sans-serif", color: colors.text }}>
@@ -252,7 +303,6 @@ export function HistoryView() {
    CONFIGURACIÓN (incluye Seguridad con validación de contraseña)
    ============================================================ */
 
-// Reglas de seguridad de la contraseña
 function evaluatePassword(pass) {
   return {
     length:  pass.length >= 8,
@@ -349,7 +399,7 @@ const NOTIF_PREFS = [
 
 const DEFAULT_NOTIF_PREFS = NOTIF_PREFS.reduce((acc, p) => ({ ...acc, [p.key]: true }), {});
 
-function SectionCard({ icon, iconBg, title, children }) {
+function SectionCard({ icon, iconBg, title, children, headerAction }) {
   const { colors } = useTheme();
   return (
     <div style={{ background: colors.card, borderRadius: 14, padding: 24, marginBottom: 16, border: `1px solid ${colors.border}`, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
@@ -357,9 +407,43 @@ function SectionCard({ icon, iconBg, title, children }) {
         <div style={{ width: 38, height: 38, borderRadius: 11, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
           {icon}
         </div>
-        <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: colors.text }}>{title}</h2>
+        <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: colors.text, flex: 1 }}>{title}</h2>
+        {headerAction}
       </div>
       {children}
+    </div>
+  );
+}
+
+const PROFILE_FIELDS = [
+  { key: 'nombre', label: 'Nombre completo', editable: true },
+  { key: 'rol', label: 'Rol', editable: true },
+  { key: 'email', label: 'Email', editable: true, type: 'email' },
+  { key: 'unidad', label: 'Centro de formación', editable: true },
+];
+
+function ProfileField({ label, value, editing, onChange, type = 'text' }) {
+  const { colors } = useTheme();
+  return (
+    <div>
+      <div style={{ fontSize: 11, fontWeight: 600, color: colors.textFaint, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{label}</div>
+      {editing ? (
+        <input
+          type={type}
+          value={value}
+          onChange={onChange}
+          placeholder={`Ingresa ${label.toLowerCase()}`}
+          style={{
+            width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: 8,
+            border: `1px solid ${BRAND.greenMid}`, background: colors.inputBg, color: colors.text,
+            fontSize: 14, outline: 'none',
+          }}
+        />
+      ) : (
+        <div style={{ padding: '10px 12px', background: colors.inputBg, borderRadius: 8, fontSize: 14, border: `1px solid ${colors.border}`, color: value ? colors.text : colors.textFaint }}>
+          {value || 'No especificado'}
+        </div>
+      )}
     </div>
   );
 }
@@ -367,8 +451,6 @@ function SectionCard({ icon, iconBg, title, children }) {
 export function SettingsView({ userName, darkMode = false, onToggleDarkMode }) {
   const { colors, theme } = useTheme();
   const savedUser = JSON.parse(localStorage.getItem('sena_user') || '{}');
-  // Antes traía un correo de ejemplo por defecto ('coordinador@sena.edu.co').
-  // Ahora queda vacío si no hay usuario guardado, para que se use el dato real.
   const userEmail = savedUser.email || '';
   const [currPass, setCurrPass] = useState('');
   const [newPass, setNewPass] = useState('');
@@ -387,11 +469,32 @@ export function SettingsView({ userName, darkMode = false, onToggleDarkMode }) {
     }
   });
 
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileData, setProfileData] = useState(() => ({
+    nombre: userName || savedUser.nombre || '',
+    rol: savedUser.rol || '',
+    email: userEmail,
+    unidad: savedUser.unidad || '',
+  }));
+  const [profileForm, setProfileForm] = useState(profileData);
+
   useEffect(() => {
     localStorage.setItem('sena_notif_prefs', JSON.stringify(notifPrefs));
   }, [notifPrefs]);
 
-  const togglePref = (key) => setNotifPrefs(prev => ({ ...prev, [key]: !prev[key] }));
+  const togglePref = (key) => {
+    setNotifPrefs(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      const label = NOTIF_PREFS.find(p => p.key === key)?.label || key;
+      addHistoryEntry({
+        action: 'Preferencia actualizada',
+        detail: `${label}: ${next[key] ? 'activada' : 'desactivada'}`,
+        type: 'Notificaciones',
+        kind: 'system',
+      });
+      return next;
+    });
+  };
 
   const checks = evaluatePassword(newPass);
   const isPasswordStrong = Object.values(checks).every(Boolean);
@@ -400,6 +503,56 @@ export function SettingsView({ userName, darkMode = false, onToggleDarkMode }) {
   const showToast = (msg, color = BRAND.greenSoft) => {
     setToast({ msg, color });
     setTimeout(() => setToast(null), 3200);
+  };
+
+  const handleStartEditProfile = () => {
+    setProfileForm(profileData);
+    setEditingProfile(true);
+  };
+
+  const handleCancelEditProfile = () => {
+    setProfileForm(profileData);
+    setEditingProfile(false);
+  };
+
+  const handleProfileFieldChange = (key) => (e) => {
+    setProfileForm(prev => ({ ...prev, [key]: e.target.value }));
+  };
+
+  const handleSaveProfile = () => {
+    if (!profileForm.nombre.trim()) {
+      showToast('El nombre completo es obligatorio', BRAND.danger);
+      return;
+    }
+    if (!profileForm.email.trim()) {
+      showToast('El email es obligatorio', BRAND.danger);
+      return;
+    }
+
+    const updatedUser = {
+      ...savedUser,
+      name: profileForm.nombre,
+      nombre: profileForm.nombre,
+      rol: profileForm.rol,
+      email: profileForm.email,
+      unidad: profileForm.unidad,
+    };
+
+    try {
+      localStorage.setItem('sena_user', JSON.stringify(updatedUser));
+      setProfileData(profileForm);
+      setEditingProfile(false);
+      showToast('Perfil actualizado exitosamente');
+      addHistoryEntry({
+        action: 'Perfil actualizado',
+        detail: `Se actualizó la información de perfil de ${profileForm.nombre}`,
+        by: profileForm.nombre,
+        type: 'Perfil',
+        kind: 'approved',
+      });
+    } catch (err) {
+      showToast('No se pudo guardar la información del perfil', BRAND.danger);
+    }
   };
 
   const handlePasswordChange = async () => {
@@ -419,13 +572,36 @@ export function SettingsView({ userName, darkMode = false, onToggleDarkMode }) {
     try {
       await changePassword(userEmail, currPass, newPass);
       showToast('Contraseña actualizada exitosamente');
+      addHistoryEntry({
+        action: 'Contraseña cambiada',
+        detail: 'La contraseña de la cuenta fue actualizada',
+        type: 'Seguridad',
+        kind: 'approved',
+      });
       setCurrPass('');
       setNewPass('');
       setConfPass('');
       setTouched(false);
     } catch (err) {
       showToast(err.message || 'Error al cambiar la contraseña', BRAND.danger);
+      addHistoryEntry({
+        action: 'Intento fallido',
+        detail: err.message || 'Error al cambiar la contraseña',
+        type: 'Seguridad',
+        kind: 'rejected',
+      });
     }
+  };
+
+  const handleToggleDarkMode = () => {
+    const goingTo = darkMode ? 'claro' : 'oscuro';
+    onToggleDarkMode?.();
+    addHistoryEntry({
+      action: 'Apariencia cambiada',
+      detail: `Modo ${goingTo} activado`,
+      type: 'Apariencia',
+      kind: 'system',
+    });
   };
 
   return (
@@ -454,12 +630,56 @@ export function SettingsView({ userName, darkMode = false, onToggleDarkMode }) {
               {darkMode ? 'Activado — interfaz con colores oscuros' : 'Desactivado — interfaz con colores claros'}
             </div>
           </div>
-          <Toggle checked={darkMode} onChange={onToggleDarkMode} />
+          <Toggle checked={darkMode} onChange={handleToggleDarkMode} />
         </div>
       </SectionCard>
 
       {/* Perfil */}
-      <SectionCard icon={<IconUser size={18} />} iconBg={`linear-gradient(135deg, ${BRAND.greenSoft}, ${BRAND.greenMid})`} title="Perfil de usuario">
+      <SectionCard
+        icon={<IconUser size={18} />}
+        iconBg={`linear-gradient(135deg, ${BRAND.greenSoft}, ${BRAND.greenMid})`}
+        title="Perfil de usuario"
+        headerAction={
+          editingProfile ? (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={handleCancelEditProfile}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8,
+                  border: `1px solid ${colors.borderStrong}`, background: 'transparent', color: colors.textSecondary,
+                  fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                <IconX size={14} /> Cancelar
+              </button>
+              <button
+                onClick={handleSaveProfile}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8,
+                  border: 'none', background: `linear-gradient(135deg, ${BRAND.greenSoft}, ${BRAND.greenMid})`,
+                  color: '#fff', fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(57,169,0,0.3)',
+                }}
+              >
+                <IconSave size={14} /> Guardar
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={handleStartEditProfile}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8,
+                border: `1px solid ${BRAND.greenMid}`, background: 'transparent', color: BRAND.greenMid,
+                fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = theme === 'dark' ? 'rgba(107,201,58,0.12)' : '#EAF6DE'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              <IconEdit size={14} /> Editar información
+            </button>
+          )
+        }
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
           <div style={{
             width: 56, height: 56, borderRadius: '50%',
@@ -468,24 +688,42 @@ export function SettingsView({ userName, darkMode = false, onToggleDarkMode }) {
             fontSize: 17, fontWeight: 700, color: BRAND.greenMid,
             border: `3px solid ${theme === 'dark' ? 'rgba(107,201,58,0.35)' : '#C0DD97'}`,
           }}>
-            {userName?.split(' ').map(w => w[0]).join('').slice(0, 2) || ''}
+            {(profileData.nombre || '').split(' ').map(w => w[0]).join('').slice(0, 2)}
           </div>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: colors.text }}>{userName || ''}</div>
-            <div style={{ fontSize: 13, color: colors.textMuted, marginTop: 2 }}>{savedUser.rol || ''}</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: colors.text }}>{profileData.nombre || ''}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+              {profileData.rol && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 20,
+                  background: theme === 'dark' ? 'rgba(107,201,58,0.16)' : '#EAF6DE', color: BRAND.greenMid,
+                  fontSize: 12, fontWeight: 700,
+                }}>
+                  <IconUserCheck size={12} /> {profileData.rol}
+                </span>
+              )}
+              {profileData.unidad && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 20,
+                  background: theme === 'dark' ? 'rgba(252,115,35,0.16)' : '#FFF1E8', color: BRAND.orangeMid,
+                  fontSize: 12, fontWeight: 700,
+                }}>
+                  <IconBuilding size={12} /> {profileData.unidad}
+                </span>
+              )}
+            </div>
           </div>
         </div>
         <div className="coord-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-          {[
-            { label: 'Nombre completo', value: userName || '' },
-            { label: 'Rol', value: savedUser.rol || '' },
-            { label: 'Email', value: userEmail },
-            { label: 'Unidad', value: savedUser.unidad || '' },
-          ].map((f) => (
-            <div key={f.label}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: colors.textFaint, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{f.label}</div>
-              <div style={{ padding: '10px 12px', background: colors.inputBg, borderRadius: 8, fontSize: 14, border: `1px solid ${colors.border}`, color: colors.text }}>{f.value}</div>
-            </div>
+          {PROFILE_FIELDS.map((f) => (
+            <ProfileField
+              key={f.key}
+              label={f.label}
+              value={editingProfile ? profileForm[f.key] : profileData[f.key]}
+              editing={editingProfile}
+              type={f.type}
+              onChange={handleProfileFieldChange(f.key)}
+            />
           ))}
         </div>
       </SectionCard>
@@ -510,7 +748,6 @@ export function SettingsView({ userName, darkMode = false, onToggleDarkMode }) {
             onToggleVisible={() => setShowNew(v => !v)}
           />
 
-          {/* Checklist de requisitos en tiempo real */}
           <div style={{
             display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px',
             padding: '12px 14px', background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#F9FAFB',

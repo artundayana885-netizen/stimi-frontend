@@ -8,6 +8,7 @@ import ComplianceView from './ComplianceView';
 import { Notifications, HistoryView, SettingsView } from './SharedViews';
 import apiClient from '../../../services/apiClient';
 import { getAllUsers } from '../../../services/authService';
+import AIAssistant from '../instructor/AIAssistant';
 
 /* ============================================================
    ICONOS — línea profesional, 2px de trazo, estáticos (sin
@@ -70,7 +71,7 @@ function SidebarComponent({ activeView, onViewChange, onLogout, role, notifCount
     { key: 'reports',           label: 'Reportes', icon: <IconBarChart /> },
     { key: 'compliance',        label: 'Cumplimiento', icon: <IconTarget /> },
     { key: 'user-management',   label: 'Usuarios', badge: pendingCount, icon: <IconUsers /> },
-    { key: 'notifications',     label: 'Notificaciones', icon: <IconBell /> },
+    { key: 'notifications',     label: 'Notificaciones', badge: notifCount, icon: <IconBell /> },
     { key: 'history',           label: 'Historial', icon: <IconClock /> },
   ] : [];
 
@@ -129,12 +130,17 @@ function SidebarComponent({ activeView, onViewChange, onLogout, role, notifCount
   };
 
   return (
-    <aside style={{
-      width: expanded ? 220 : 72, minWidth: expanded ? 220 : 72,
-      borderRight: `1px solid ${colors.border}`, background: colors.card,
-      display: 'flex', flexDirection: 'column', height: '100vh',
-      position: 'sticky', top: 0, transition: 'width .18s ease, min-width .18s ease',
-      overflow: 'hidden',
+    <aside
+  onMouseEnter={() => setExpanded(true)}
+  onMouseLeave={() => setExpanded(false)}
+  style={{
+    width: expanded ? 220 : 72, minWidth: expanded ? 220 : 72,
+    borderRight: `1px solid ${colors.border}`, background: colors.card,
+    display: 'flex', flexDirection: 'column', height: '100vh',
+    position: 'sticky', top: 0, transition: 'width .16s ease, min-width .18s ease',
+    overflow: 'hidden',
+ 
+
     }}>
       <style>{`
         .sidebar-scroll {
@@ -151,25 +157,23 @@ function SidebarComponent({ activeView, onViewChange, onLogout, role, notifCount
       <div style={{ padding: expanded ? '18px 16px 14px' : '18px 0 14px', borderBottom: `1px solid ${colors.border}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: expanded ? 'space-between' : 'center', padding: expanded ? 0 : '0 12px' }}>
           {expanded ? (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg, ${BRAND.greenMid}, ${BRAND.greenDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 11, letterSpacing: 0.5, flexShrink: 0 }}>SENA</div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: colors.text, lineHeight: 1.2, whiteSpace: 'nowrap' }}>Portal Coordinador</div>
-                  <div style={{ fontSize: 11, color: colors.textMuted, whiteSpace: 'nowrap' }}>Sistema de Gestión</div>
-                </div>
-              </div>
-              <button onClick={() => setExpanded(false)} title="Cerrar menú" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: colors.textMuted, padding: 4, flexShrink: 0, display: 'flex' }}
-                onMouseEnter={e => e.currentTarget.style.color = BRAND.greenMid}
-                onMouseLeave={e => e.currentTarget.style.color = colors.textMuted}
-              >
-                <MenuToggleIcon />
-              </button>
-            </>
-          ) : (
-            <button onClick={() => setExpanded(true)} title="Abrir menú" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: BRAND.greenMid, padding: 4, display: 'flex' }}>
-              <MenuToggleIcon size={26} />
-            </button>
+  <>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+      <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg, ${BRAND.greenMid}, ${BRAND.greenDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 11, letterSpacing: 0.5, flexShrink: 0 }}>SENA</div>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: colors.text, lineHeight: 1.2, whiteSpace: 'nowrap' }}>Portal Coordinador</div>
+        <div style={{ fontSize: 11, color: colors.textMuted, whiteSpace: 'nowrap' }}>Sistema de Gestión</div>
+      </div>
+    </div>
+    <span style={{ color: colors.textMuted, padding: 4, flexShrink: 0, display: 'flex' }}>
+      <MenuToggleIcon />
+    </span>
+  </>
+) : (
+  <span style={{ color: BRAND.greenMid, padding: 4, display: 'flex' }}>
+    <MenuToggleIcon size={26} />
+  </span>
+
           )}
         </div>
       </div>
@@ -253,6 +257,8 @@ export default function CoordinatorDashboard({ user, onLogout, pendingUsers, set
           setPendingUsers={setPendingUsers}
           onAssignRole={onAssignRole}
           onRejectUser={onRejectUser}
+          notifications={notifications}
+          setNotifications={setNotifications}
         />
       );
       case 'notifications': return <Notifications notifications={notifications} setNotifications={setNotifications} />;
@@ -270,7 +276,7 @@ export default function CoordinatorDashboard({ user, onLogout, pendingUsers, set
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: colors.bg, color: colors.text, fontFamily: "'Inter', 'Segoe UI', sans-serif" }}>
+    <div style={{ display: 'flex', height: '100vh', background: colors.bg, color: colors.text, fontFamily: "'Inter', 'Segoe UI', sans-serif" }}>
       <SidebarComponent
         activeView={activeView}
         onViewChange={setActiveView}
@@ -294,141 +300,6 @@ export default function CoordinatorDashboard({ user, onLogout, pendingUsers, set
       <main className="main-scroll" style={{ flex: 1, padding: '28px 32px', overflowY: 'auto', background: colors.bg }}>
         {renderView()}
       </main>
-    </div>
-  );
-}
-
-function AIAssistant() {
-  const [messages, setMessages] = useState([
-    { role: 'assistant', text: '¡Hola! Soy tu asistente virtual del SITMI. ¿En qué puedo ayudarte hoy? Puedo responder preguntas sobre cómo completar informes, fechas de entrega, documentos requeridos y más.' }
-  ]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const suggestions = [
-    '¿Qué documentos necesito para el informe GC?',
-    '¿Cuál es la fecha límite para entregar informes?',
-    '¿Cómo adjunto evidencias a una obligación?',
-    '¿Qué hago si no realicé una actividad?',
-  ];
-
-  const handleSend = async (text) => {
-    const msg = text || input.trim();
-    if (!msg) return;
-    setInput('');
-    setMessages(prev => [...prev, { role: 'user', text: msg }]);
-    setLoading(true);
-    try {
-      const { data } = await apiClient.post('/usuario/chat', { message: msg });
-      const reply = data.reply || 'Lo siento, no pude procesar tu consulta.';
-      setMessages(prev => [...prev, { role: 'assistant', text: reply }]);
-    } catch (err) {
-      setMessages(prev => [...prev, { role: 'assistant', text: 'Ocurrió un error al conectar con el asistente. Por favor intenta de nuevo.' }]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div style={{ fontFamily: "'Inter', 'Segoe UI', sans-serif", color: '#111827', display: 'flex', gap: 20, height: 'calc(100vh - 56px)' }}>
-      {/* Chat */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 16, border: '1px solid #E8ECF0', overflow: 'hidden' }}>
-        {/* Header */}
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid #F0F2F5', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 12, background: `linear-gradient(135deg, ${BRAND.greenMid}, ${BRAND.greenDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-            <IconSparkle size={19} />
-          </div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#111827' }}>Asistente IA</div>
-            <div style={{ fontSize: 12, color: BRAND.greenSoft, display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: BRAND.greenSoft, display: 'inline-block' }} />
-              Tu ayudante inteligente para resolver dudas sobre el sistema
-            </div>
-          </div>
-        </div>
-        {/* Messages */}
-        <div style={{ flex: 1, padding: '20px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {messages.map((m, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: m.role === 'assistant' ? 'flex-start' : 'flex-end' }}>
-              {m.role === 'assistant' && (
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg, ${BRAND.greenMid}, ${BRAND.greenDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginRight: 8, marginTop: 2, color: '#fff' }}>
-                  <IconSparkle size={13} />
-                </div>
-              )}
-              <div style={{
-                maxWidth: '72%', padding: '12px 16px', borderRadius: m.role === 'assistant' ? '4px 16px 16px 16px' : '16px 4px 16px 16px',
-                background: m.role === 'assistant' ? '#F7F9FC' : `linear-gradient(135deg, ${BRAND.greenSoft}, ${BRAND.greenMid})`,
-                color: m.role === 'assistant' ? '#374151' : '#fff',
-                fontSize: 14, lineHeight: 1.6,
-                border: m.role === 'assistant' ? '1px solid #E8ECF0' : 'none',
-              }}>
-                {m.text}
-              </div>
-            </div>
-          ))}
-          {loading && (
-            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-              <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg, ${BRAND.greenMid}, ${BRAND.greenDark})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginRight: 8, marginTop: 2, color: '#fff' }}>
-                <IconSparkle size={13} />
-              </div>
-              <div style={{ maxWidth: '72%', padding: '12px 16px', borderRadius: '4px 16px 16px 16px', background: '#F7F9FC', color: '#6B7280', fontSize: 14, border: '1px solid #E8ECF0', fontStyle: 'italic' }}>
-                Pensando...
-              </div>
-            </div>
-          )}
-        </div>
-        {/* Input */}
-        <div style={{ padding: '16px 24px', borderTop: '1px solid #F0F2F5', display: 'flex', gap: 10 }}>
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
-            placeholder="Escribe tu pregunta aquí..."
-            style={{ flex: 1, padding: '11px 16px', borderRadius: 12, border: '1px solid #E8ECF0', fontSize: 14, background: '#F7F9FC', outline: 'none', color: '#374151' }}
-            disabled={loading}
-          />
-          <button
-            onClick={() => handleSend()}
-            disabled={loading}
-            style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg, ${BRAND.greenSoft}, ${BRAND.greenMid})`, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: loading ? 0.6 : 1 }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      {/* Sidebar suggestions */}
-      <div style={{ width: 280, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{ background: '#fff', borderRadius: 16, padding: '20px', border: '1px solid #E8ECF0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <span style={{ color: BRAND.orangeMid, display: 'flex' }}><IconSparkle size={16} /></span>
-            <span style={{ fontWeight: 600, fontSize: 14, color: '#111827' }}>Sugerencias</span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {suggestions.map((s, i) => (
-              <button key={i} onClick={() => handleSend(s)} disabled={loading} style={{
-                textAlign: 'left', padding: '10px 14px', borderRadius: 10, border: '1px solid #E8ECF0',
-                background: '#F7F9FC', fontSize: 13, color: '#374151', cursor: 'pointer', lineHeight: 1.4,
-              }}
-                onMouseEnter={(e) => { if (!loading) { e.currentTarget.style.background = '#F0FDF4'; e.currentTarget.style.borderColor = '#bbf7d0'; } }}
-                onMouseLeave={(e) => { if (!loading) { e.currentTarget.style.background = '#F7F9FC'; e.currentTarget.style.borderColor = '#E8ECF0'; } }}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div style={{ background: '#F0FDF4', borderRadius: 16, padding: '20px', border: '1px solid #bbf7d0' }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: BRAND.greenDark, marginBottom: 12 }}>Ayuda rápida</div>
-          {['Pregunta sobre cualquier proceso', 'Obtén información de fechas', 'Consulta requisitos de informes', 'Resuelve dudas técnicas'].map((tip, i) => (
-            <div key={i} style={{ fontSize: 13, color: '#166534', marginBottom: 6, display: 'flex', gap: 6 }}>
-              <span>•</span><span>{tip}</span>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

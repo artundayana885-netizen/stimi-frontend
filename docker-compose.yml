@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+
+  # --- Base de datos PostgreSQL ---
+  postgres:
+    image: postgres:16
+    container_name: stimi-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+      POSTGRES_DB: stimi_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - stimi_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --- Backend NestJS ---
+  backend:
+    build:
+      context: ./Backend/STIMI---Backend-
+      dockerfile: Dockerfile
+    container_name: stimi-backend
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      DB_TYPE: postgres
+      DB_HOST: postgres        # nombre del servicio, Docker lo resuelve como hostname
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres123
+      DB_DATABASE: stimi_db
+      MAIL_HOST: smtp.gmail.com
+      MAIL_USER: ${MAIL_USER}
+      MAIL_PASS: ${MAIL_PASS}
+      MAIL_PORT: 587
+      MAIL_SECURE: "false"
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    ports:
+      - "3000:3000"
+
+  # --- Frontend React (compilado y servido por nginx) ---
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:3000
+    container_name: stimi-frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  stimi_pgdata:

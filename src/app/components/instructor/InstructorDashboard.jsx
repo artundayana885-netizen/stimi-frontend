@@ -302,7 +302,7 @@ export default function InstructorDashboard({ user, onLogout }) {
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: colors.bg, fontFamily: "'Inter','Segoe UI',sans-serif", color: colors.text, transition: 'background .2s' }}>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: colors.bg, fontFamily: "'Inter','Segoe UI',sans-serif", color: colors.text, transition: 'background .2s' }}>
       <style>{`
         * { scrollbar-width: thin; scrollbar-color: ${colors.borderStrong} transparent; }
         *::-webkit-scrollbar { width: 6px; height: 6px; }

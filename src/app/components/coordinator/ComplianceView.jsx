@@ -1,32 +1,23 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTheme } from '../../../ThemeContext';
+import { getAllUsers } from '../../../services/authService';
 
 /* ============================================================
    Token de marca — colores OFICIALES del SENA (verificados).
-   Verde institucional vigente: #39A900 (Pantone 361 C, Resolución 1-1910 / 2022-2026).
-   Naranja institucional: #FC7323 (Pantone 021 U, Manual de Identidad SENA 2012,
-   "los colores principales para diseño son Naranja y Verde").
-
-   Rediseño: se rebalancea el uso de color para que el naranja tenga
-   presencia real (no solo un acento minúsculo), tal como establece el
-   manual de marca — verde y naranja como colores principales a la par.
    ============================================================ */
 const BRAND = {
   greenDark: '#1F5D00',
   green: '#2C7A00',
-  greenMid: '#39A900',   // ← Verde oficial SENA
+  greenMid: '#39A900',
   greenSoft: '#4CBF14',
   greenBright: '#63D62E',
   greenPale: '#8FE86B',
   orangeDeep: '#C25A12',
-  orangeMid: '#FC7323',  // ← Naranja institucional SENA
+  orangeMid: '#FC7323',
   orangeSoft: '#FF8F4D',
   orangeBright: '#FFAE7A',
 };
 
-/* ============================================================
-   Iconos — línea 2px, sin emojis del sistema.
-   ============================================================ */
 const Icon = ({ children, size = 18, ...props }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
     {children}
@@ -41,27 +32,21 @@ const IconArrowRight = (p) => <Icon {...p}><line x1="5" y1="12" x2="19" y2="12" 
 const IconLayers = (p) => <Icon {...p}><polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" /></Icon>;
 const IconX = (p) => <Icon {...p}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></Icon>;
 
-// ── Áreas de ejemplo eliminadas. Agrega tus áreas reales aquí, o
-// conéctalas a tu fuente de datos. Formato esperado:
-// { name: 'TIC', instructors: 18, value: 90, color: BRAND.greenMid,
-//   people: [{ name: 'Ana Jiménez', value: 100 }, ...] }
-const areas = [];
+// Paleta para asignar un color distinto a cada área que aparezca
+const AREA_COLORS = ['#39A900', '#6366f1', '#f97316', '#a855f7', '#0ea5e9', '#ef4444', '#14b8a6', '#eab308'];
 
-// ── Histórico mensual eliminado. Agrega tus meses reales aquí.
-// Formato esperado: { month: 'Julio 2026', value: 89, current: true }
+// Histórico mensual: aún no hay fuente de datos para esto (se retoma
+// cuando se conecte el cálculo real de cumplimiento por informes).
 const monthly = [];
 
 const MONTHS_COLLAPSED = 4;
-// Puestos del ranking: naranja para el 1er lugar (medalla de oro institucional),
-// verde para 2º y 3º — el naranja deja de ser un acento tímido y pasa a marcar
-// el logro principal, como corresponde a un color de marca de igual peso.
 const RANK_COLORS = [BRAND.orangeMid, BRAND.greenBright, BRAND.greenMid];
 
 function initials(fullName) {
   return fullName.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
 }
 
-function AreaDetailsModal({ onClose, colors, theme }) {
+function AreaDetailsModal({ onClose, colors, theme, areas }) {
   const rankedAreas = [...areas].sort((a, b) => b.value - a.value);
   const rankFallbackBg = theme === 'dark' ? 'rgba(255,255,255,0.08)' : colors.border;
   return (
@@ -105,7 +90,7 @@ function AreaDetailsModal({ onClose, colors, theme }) {
                 <div style={{ width: 8, height: 8, borderRadius: 2, background: a.color, flexShrink: 0 }} />
                 <span style={{ fontSize: 13.5, fontWeight: 700, color: colors.text }}>{a.name}</span>
                 <span style={{ fontSize: 11, color: colors.textFaint }}>{a.instructors} instructores</span>
-                <span style={{ marginLeft: 'auto', fontSize: 14, fontWeight: 800, color: a.color }}>{a.value}%</span>
+                <span style={{ marginLeft: 'auto', fontSize: 14, fontWeight: 800, color: a.color }}>{a.value ? `${a.value}%` : '—'}</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 9, paddingLeft: 32 }}>
                 {a.people.map((p) => (
@@ -117,9 +102,9 @@ function AreaDetailsModal({ onClose, colors, theme }) {
                     }}>{initials(p.name)}</div>
                     <span style={{ fontSize: 12.5, color: colors.textSecondary, width: 118, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
                     <div style={{ flex: 1, height: 6, background: colors.inputBg, borderRadius: 3, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${p.value}%`, background: a.color, borderRadius: 3 }} />
+                      <div style={{ height: '100%', width: `${p.value || 0}%`, background: a.color, borderRadius: 3 }} />
                     </div>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: colors.text, width: 34, textAlign: 'right' }}>{p.value}%</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: colors.text, width: 34, textAlign: 'right' }}>{p.value ? `${p.value}%` : '—'}</span>
                   </div>
                 ))}
               </div>
@@ -135,20 +120,45 @@ export default function ComplianceView() {
   const { colors, theme } = useTheme();
   const [showAreaModal, setShowAreaModal] = useState(false);
   const [showFullHistory, setShowFullHistory] = useState(false);
+  const [dbUsers, setDbUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getAllUsers()
+      .then(setDbUsers)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Agrupa los instructores reales por área. Solo se cuentan usuarios
+  // con rol asignado (los "Pendiente" no tienen role todavía).
+  const areas = (() => {
+    const instructores = dbUsers.filter(u => u.estado !== 'Pendiente' && u.role === 'instructor');
+    const groups = {};
+    instructores.forEach((u) => {
+      const areaName = u.area || 'Sin asignar';
+      if (!groups[areaName]) groups[areaName] = [];
+      groups[areaName].push(u);
+    });
+    return Object.entries(groups).map(([name, people], idx) => ({
+      name,
+      instructors: people.length,
+      value: null, // cumplimiento real: pendiente de definir fuente de datos
+      color: AREA_COLORS[idx % AREA_COLORS.length],
+      people: people.map(u => ({ name: u.name, value: u.compliance ?? null })),
+    }));
+  })();
 
   const visibleMonths = showFullHistory ? monthly : monthly.slice(0, MONTHS_COLLAPSED);
   const currentMonth = monthly.find(m => m.current) || monthly[0] || { month: '—', value: 0, current: false };
-  const rankedAreas = [...areas].sort((a, b) => b.value - a.value);
+  const rankedAreas = [...areas].sort((a, b) => (b.value || 0) - (a.value || 0));
   const bestArea = rankedAreas[0] || null;
   const rankFallbackBg = theme === 'dark' ? 'rgba(255,255,255,0.08)' : colors.border;
 
-  // Fondo suave para la fila del "mes actual" en el histórico
   const currentRowBg = theme === 'dark' ? 'rgba(22,163,74,0.14)' : '#F0FDF4';
   const currentRowBorder = theme === 'dark' ? 'rgba(22,163,74,0.35)' : '#BBF7D0';
   const currentTrackBg = theme === 'dark' ? 'rgba(22,163,74,0.25)' : '#BBF7D0';
 
-  // Geometría de la mini-tendencia anual (cronológica), curva suavizada.
-  // Solo se calcula si hay al menos 2 meses con datos.
   const chronological = [...monthly].reverse();
   const hasTrend = chronological.length > 1;
   const chartW = 320, chartH = 110, padX = 14, padY = 14;
@@ -174,8 +184,6 @@ export default function ComplianceView() {
   }
 
   const ringR = 42, ringCirc = 2 * Math.PI * ringR;
-
-  // ── Totales calculados a partir de las áreas reales (0 si aún no hay datos).
   const totalInstructors = areas.reduce((sum, a) => sum + (a.instructors || 0), 0);
 
   return (
@@ -190,18 +198,12 @@ export default function ComplianceView() {
         .sena-bar2 > div { animation: senaGrow2 .8s cubic-bezier(.3,0,.2,1) both; }
       `}</style>
 
-      {/* ============ HERO ============
-          Verde como base (color principal del logosímbolo), pero con una
-          cuña naranja real en el costado — no un punto decorativo — para
-          que el naranja institucional tenga presencia visible, tal como
-          indica el manual de marca (verde y naranja a la par). */}
       <div style={{
         background: `linear-gradient(115deg, ${BRAND.greenDark} 0%, ${BRAND.green} 60%, ${BRAND.greenMid} 100%)`,
         borderRadius: 18, padding: '30px 34px', marginBottom: 22, color: '#fff',
         position: 'relative', overflow: 'hidden',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 28, flexWrap: 'wrap',
       }}>
-        {/* Barra superior verde→naranja (misma proporción que el resto del sistema) */}
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: `linear-gradient(90deg, ${BRAND.greenBright} 0%, ${BRAND.greenBright} 55%, ${BRAND.orangeMid} 100%)` }} />
         <svg style={{ position: 'absolute', inset: 0, opacity: 0.07, pointerEvents: 'none' }} width="100%" height="100%">
           <defs>
@@ -211,7 +213,6 @@ export default function ComplianceView() {
           </defs>
           <rect width="100%" height="100%" fill="url(#compHeroPattern)" />
         </svg>
-        {/* Cuña naranja diagonal — bloque de color real, no solo un halo tenue */}
         <div style={{
           position: 'absolute', right: 0, top: 0, bottom: 0, width: '34%',
           background: `linear-gradient(160deg, rgba(252,115,35,0.22) 0%, rgba(252,115,35,0.06) 70%)`,
@@ -231,7 +232,7 @@ export default function ComplianceView() {
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             {bestArea && (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 20, padding: '6px 14px', fontSize: 12.5, fontWeight: 600 }}>
-                <IconLayers size={14} /> Área líder: {bestArea.name} ({bestArea.value}%)
+                <IconLayers size={14} /> Área líder: {bestArea.name}
               </span>
             )}
           </div>
@@ -251,15 +252,10 @@ export default function ComplianceView() {
         </div>
       </div>
 
-      {/* ============ TOP STATS ============
-          Antes: 3 bloques sólidos en verde que empastaban la pantalla.
-          Ahora: tarjetas neutras (fondo colors.card) con un chip de ícono
-          de color — verde / naranja / verde — para que la vista se sienta
-          balanceada e institucional en vez de "toda verde". */}
       <div className="coord-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 22 }}>
         {[
           { label: 'Cumplimiento global', value: `${currentMonth.value}%`, Icon: IconTarget, accent: BRAND.greenMid, chipBg: theme === 'dark' ? 'rgba(57,169,0,0.16)' : '#EAF6DE' },
-          { label: 'Total instructores', value: String(totalInstructors), Icon: IconUsers, accent: BRAND.orangeMid, chipBg: theme === 'dark' ? 'rgba(252,115,35,0.16)' : '#FFF1E8' },
+          { label: 'Total instructores', value: loading ? '…' : String(totalInstructors), Icon: IconUsers, accent: BRAND.orangeMid, chipBg: theme === 'dark' ? 'rgba(252,115,35,0.16)' : '#FFF1E8' },
           { label: 'Informes al día', value: '0', Icon: IconCheckCircle, accent: BRAND.greenMid, chipBg: theme === 'dark' ? 'rgba(57,169,0,0.16)' : '#EAF6DE' },
         ].map((s, i) => {
           const SIcon = s.Icon;
@@ -285,10 +281,8 @@ export default function ComplianceView() {
         })}
       </div>
 
-      {/* ============ DOS COLUMNAS ============ */}
       <div className="coord-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
 
-        {/* Cumplimiento por Área — ranking */}
         <div style={{ background: colors.card, borderRadius: 14, padding: 22, border: `1px solid ${colors.border}`, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
           <div style={{ marginBottom: 18 }}>
             <div style={{ fontWeight: 700, fontSize: 15, color: colors.text }}>Cumplimiento por área</div>
@@ -296,7 +290,7 @@ export default function ComplianceView() {
           </div>
           {rankedAreas.length === 0 ? (
             <div style={{ padding: '24px 4px', textAlign: 'center', fontSize: 12.5, color: colors.textFaint, marginBottom: 14 }}>
-              No hay áreas registradas todavía.
+              {loading ? 'Cargando...' : 'No hay áreas registradas todavía.'}
             </div>
           ) : rankedAreas.map((a, i) => (
             <div key={a.name} className="sena-fade2" style={{ animationDelay: `${i * 90}ms`, marginBottom: 16 }}>
@@ -311,10 +305,10 @@ export default function ComplianceView() {
                   <span style={{ fontSize: 14, fontWeight: 700, color: colors.text }}>{a.name}</span>
                   <span style={{ fontSize: 11.5, color: colors.textFaint }}>{a.instructors} instructores</span>
                 </div>
-                <span style={{ fontSize: 14, fontWeight: 800, color: a.color }}>{a.value}%</span>
+                <span style={{ fontSize: 14, fontWeight: 800, color: a.color }}>{a.value ? `${a.value}%` : '—'}</span>
               </div>
               <div className="sena-bar2" style={{ height: 8, background: colors.inputBg, borderRadius: 4, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${a.value}%`, background: `linear-gradient(90deg, ${a.color}CC, ${a.color})`, borderRadius: 4, animationDelay: `${i * 90 + 100}ms` }} />
+                <div style={{ height: '100%', width: `${a.value || 0}%`, background: `linear-gradient(90deg, ${a.color}CC, ${a.color})`, borderRadius: 4, animationDelay: `${i * 90 + 100}ms` }} />
               </div>
             </div>
           ))}
@@ -328,14 +322,12 @@ export default function ComplianceView() {
           </button>
         </div>
 
-        {/* Evolución Mensual — tendencia + histórico */}
         <div style={{ background: colors.card, borderRadius: 14, padding: 22, border: `1px solid ${colors.border}`, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontWeight: 700, fontSize: 15, color: colors.text }}>Evolución mensual</div>
             <div style={{ fontSize: 12, color: colors.textFaint, marginTop: 2 }}>Histórico de cumplimiento</div>
           </div>
 
-          {/* Mini-tendencia del año, solo si hay al menos 2 meses cargados */}
           {hasTrend && (
             <div style={{ marginBottom: 18 }}>
               <svg viewBox={`0 0 ${chartW} ${chartH}`} width="100%" height="100" preserveAspectRatio="xMidYMid meet">
@@ -408,7 +400,7 @@ export default function ComplianceView() {
         </div>
       </div>
 
-      {showAreaModal && <AreaDetailsModal onClose={() => setShowAreaModal(false)} colors={colors} theme={theme} />}
+      {showAreaModal && <AreaDetailsModal onClose={() => setShowAreaModal(false)} colors={colors} theme={theme} areas={areas} />}
     </div>
   );
 }

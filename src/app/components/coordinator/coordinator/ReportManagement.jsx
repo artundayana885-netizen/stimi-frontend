@@ -1,78 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Toast from '../Toast';
-
-const initialReports = [
-  {
-    id: 1, instructor: 'María González', type: 'GC', month: 'Noviembre 2024', status: 'Pendiente',
-    date: '2024-11-05', initials: 'MG', color: '#6366f1', bg: '#EEF2FF',
-    fileName: 'Informe_GC_Noviembre_2024.pdf',
-    fileType: 'pdf',
-    filePages: 3,
-    previewContent: [
-      { label: 'Actividades realizadas', value: 'Formación técnica en programación web, React y Node.js con 32 aprendices del grupo ADSO-2024.' },
-      { label: 'Horas impartidas', value: '80 horas presenciales + 20 horas virtuales' },
-      { label: 'Porcentaje de asistencia', value: '92%' },
-      { label: 'Observaciones', value: 'Se cumplieron todos los objetivos planteados para el mes. Pendiente ajuste en evaluación final.' },
-      { label: 'Firma instructor', value: 'María González — C.C. 52.123.456' },
-    ],
-  },
-  {
-    id: 2, instructor: 'Carlos Rodríguez', type: 'GF', month: 'Noviembre 2024', status: 'Pendiente',
-    date: '2024-11-04', initials: 'CR', color: '#f97316', bg: '#FFF7ED',
-    fileName: 'Informe_GF_Noviembre_2024.pdf',
-    fileType: 'pdf',
-    filePages: 2,
-    previewContent: [
-      { label: 'Actividades formativas', value: 'Taller de redes de datos y configuración de routers Cisco con grupo Redes-2024.' },
-      { label: 'Horas impartidas', value: '60 horas presenciales' },
-      { label: 'Porcentaje de asistencia', value: '87%' },
-      { label: 'Observaciones', value: 'Grupo con buen desempeño. Se requiere refuerzo en subnetting para 6 aprendices.' },
-      { label: 'Firma instructor', value: 'Carlos Rodríguez — C.C. 79.456.123' },
-    ],
-  },
-  {
-    id: 3, instructor: 'María González', type: 'GC', month: 'Octubre 2024', status: 'Aprobado',
-    date: '2024-10-30', initials: 'MG', color: '#22c55e', bg: '#F0FDF4',
-    fileName: 'Informe_GC_Octubre_2024.pdf',
-    fileType: 'pdf',
-    filePages: 3,
-    previewContent: [
-      { label: 'Actividades realizadas', value: 'Módulo de bases de datos SQL y PostgreSQL.' },
-      { label: 'Horas impartidas', value: '80 horas' },
-      { label: 'Porcentaje de asistencia', value: '95%' },
-      { label: 'Observaciones', value: 'Excelente participación del grupo.' },
-      { label: 'Firma instructor', value: 'María González — C.C. 52.123.456' },
-    ],
-  },
-  {
-    id: 4, instructor: 'Pedro Sánchez', type: 'GF', month: 'Noviembre 2024', status: 'A Corregir',
-    date: '2024-11-02', initials: 'PS', color: '#ef4444', bg: '#FEF2F2',
-    fileName: 'Informe_GF_Nov_2024_v1.pdf',
-    fileType: 'pdf',
-    filePages: 2,
-    previewContent: [
-      { label: 'Actividades realizadas', value: 'Formación en sistemas operativos Linux.' },
-      { label: 'Horas impartidas', value: '40 horas' },
-      { label: 'Porcentaje de asistencia', value: '71%' },
-      { label: 'Observaciones', value: 'Falta firma del coordinador de área. Horas no coinciden con planilla.' },
-      { label: 'Firma instructor', value: 'Pedro Sánchez — C.C. 80.321.654' },
-    ],
-  },
-  {
-    id: 5, instructor: 'Laura Torres', type: 'GC', month: 'Octubre 2024', status: 'Aprobado',
-    date: '2024-10-28', initials: 'LT', color: '#22c55e', bg: '#F0FDF4',
-    fileName: 'Informe_GC_Oct_2024_LT.pdf',
-    fileType: 'pdf',
-    filePages: 4,
-    previewContent: [
-      { label: 'Actividades realizadas', value: 'Electrónica analógica y digital, laboratorio de componentes.' },
-      { label: 'Horas impartidas', value: '96 horas' },
-      { label: 'Porcentaje de asistencia', value: '98%' },
-      { label: 'Observaciones', value: 'Grupo destacado. Todos los aprendices superaron la evaluación parcial.' },
-      { label: 'Firma instructor', value: 'Laura Torres — C.C. 43.789.012' },
-    ],
-  },
-];
+import { getReports, updateReport } from '../../../services/reportsService';
 
 const STATUS_STYLES = {
   Pendiente:    { bg: '#FFF7ED', color: '#c2410c', border: '#FED7AA' },
@@ -257,7 +185,7 @@ const NOTIFICATION_TYPES = [
   { value: 'general',     label: 'Información General',     icon: 'ℹ️',  color: '#6B7280', bg: '#F7F9FC' },
 ];
 
-function ReviewModal({ report, onClose, onApprove, onCorrect }) {
+function ReviewModal({ report, onClose, onApprove, onCorrect, submitting }) {
   const [note, setNote] = useState('');
   const [tab, setTab] = useState('doc'); // 'doc' | 'info'
   const [notifType, setNotifType] = useState('');
@@ -346,6 +274,13 @@ function ReviewModal({ report, onClose, onApprove, onCorrect }) {
                 </div>
               </div>
 
+              {/* Si el informe ya tiene una observación previa guardada en el backend, la mostramos aquí */}
+              {report.observacion && (
+                <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 12, padding: '12px 16px', fontSize: 13, color: '#7f1d1d', lineHeight: 1.6 }}>
+                  <strong>Última observación registrada:</strong> {report.observacion}
+                </div>
+              )}
+
               {/* ── Tipo de Notificación ── */}
               <div>
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>
@@ -431,19 +366,27 @@ function ReviewModal({ report, onClose, onApprove, onCorrect }) {
               {/* Acciones */}
               {report.status !== 'Aprobado' && (
                 <div className="coord-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <button onClick={() => onCorrect(report.id, note)} style={{
-                    padding: '12px', borderRadius: 10, border: 'none',
-                    background: '#FEF2F2', color: '#b91c1c', fontWeight: 700, fontSize: 13, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                  }}>
+                  <button
+                    disabled={submitting}
+                    onClick={() => onCorrect(report.id, note)}
+                    style={{
+                      padding: '12px', borderRadius: 10, border: 'none',
+                      background: '#FEF2F2', color: '#b91c1c', fontWeight: 700, fontSize: 13,
+                      cursor: submitting ? 'not-allowed' : 'pointer', opacity: submitting ? 0.6 : 1,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    }}>
                     ✏️ Solicitar Corrección
                   </button>
-                  <button onClick={() => onApprove(report.id)} style={{
-                    padding: '12px', borderRadius: 10, border: 'none',
-                    background: 'linear-gradient(135deg, #22c55e, #16a34a)', color: '#fff',
-                    fontWeight: 700, fontSize: 13, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                  }}>
+                  <button
+                    disabled={submitting}
+                    onClick={() => onApprove(report.id)}
+                    style={{
+                      padding: '12px', borderRadius: 10, border: 'none',
+                      background: 'linear-gradient(135deg, #22c55e, #16a34a)', color: '#fff',
+                      fontWeight: 700, fontSize: 13, cursor: submitting ? 'not-allowed' : 'pointer',
+                      opacity: submitting ? 0.6 : 1,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    }}>
                     ✅ Aprobar Informe
                   </button>
                 </div>
@@ -463,7 +406,9 @@ function ReviewModal({ report, onClose, onApprove, onCorrect }) {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function ReportManagement() {
-  const [reports, setReports] = useState(initialReports);
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('Todos');
   const [reviewingReport, setReviewingReport] = useState(null);
@@ -474,16 +419,57 @@ export default function ReportManagement() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleApprove = (id) => {
-    setReports(prev => prev.map(r => r.id === id ? { ...r, status: 'Aprobado', color: '#22c55e', bg: '#F0FDF4' } : r));
-    setReviewingReport(null);
-    showToast('✅ Informe aprobado correctamente');
+  // ── Carga los informes reales desde el backend (antes esto era un
+  // arreglo mock local `initialReports` que nunca se conectaba a la BD).
+  const loadReports = async () => {
+    try {
+      const data = await getReports();
+      setReports(data || []);
+    } catch (err) {
+      console.error(err);
+      showToast('Error al cargar los informes', '#ef4444');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleCorrect = (id, note) => {
-    setReports(prev => prev.map(r => r.id === id ? { ...r, status: 'A Corregir', color: '#ef4444', bg: '#FEF2F2' } : r));
-    setReviewingReport(null);
-    showToast('✏️ Corrección solicitada' + (note ? ': ' + note.slice(0, 40) : ''), '#ef4444');
+  useEffect(() => {
+    loadReports();
+  }, []);
+
+  // ── Al aprobar, se persiste el cambio de estado en el backend (PATCH
+  // /informe/:id) y se recarga la lista real.
+  const handleApprove = async (id) => {
+    setSubmitting(true);
+    try {
+      await updateReport(id, { status: 'Aprobado' });
+      showToast('✅ Informe aprobado correctamente');
+      setReviewingReport(null);
+      await loadReports();
+    } catch (err) {
+      console.error(err);
+      showToast('Error al aprobar el informe', '#ef4444');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ── Al solicitar corrección, se guarda el estado Y la observación real
+  // que escribió el revisor (antes `note` solo se usaba para un toast y
+  // se perdía; ahora viaja al backend como `observacion`).
+  const handleCorrect = async (id, note) => {
+    setSubmitting(true);
+    try {
+      await updateReport(id, { status: 'A Corregir', observacion: note });
+      showToast('✏️ Corrección solicitada' + (note ? ': ' + note.slice(0, 40) : ''), '#ef4444');
+      setReviewingReport(null);
+      await loadReports();
+    } catch (err) {
+      console.error(err);
+      showToast('Error al solicitar la corrección', '#ef4444');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const tabs = [
@@ -513,6 +499,7 @@ export default function ReportManagement() {
         onClose={() => setReviewingReport(null)}
         onApprove={handleApprove}
         onCorrect={handleCorrect}
+        submitting={submitting}
       />
 
       {/* Banner */}
@@ -573,13 +560,17 @@ export default function ReportManagement() {
 
       {/* Lista */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center', color: '#9CA3AF', fontSize: 14, background: '#fff', borderRadius: 14, border: '1px solid #F0F2F5' }}>
+            Cargando informes...
+          </div>
+        ) : filtered.length === 0 ? (
           <div style={{ padding: 40, textAlign: 'center', color: '#9CA3AF', fontSize: 14, background: '#fff', borderRadius: 14, border: '1px solid #F0F2F5' }}>
             No se encontraron informes.
           </div>
         ) : filtered.map((r) => {
-          const st = STATUS_STYLES[r.status];
-          const tc = TYPE_COLORS[r.type];
+          const st = STATUS_STYLES[r.status] || STATUS_STYLES.Pendiente;
+          const tc = TYPE_COLORS[r.type] || TYPE_COLORS.GC;
           return (
             <div key={r.id} style={{
               background: '#fff', borderRadius: 14, padding: '16px 20px',

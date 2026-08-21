@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTheme } from '../../../ThemeContext';
 import Toast from '../Toast';
 import { getReports } from '../../../services/reportsService';
+import { getAllUsers } from '../../../services/authService';
 
 /* ============================================================
    Token de marca — paleta institucional SENA (Manual de
@@ -43,6 +44,7 @@ const IconTrash = (p) => <Icon {...p}><polyline points="3 6 5 6 21 6" /><path d=
 const IconArrowRight = (p) => <Icon {...p}><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></Icon>;
 const IconAward = (p) => <Icon {...p}><circle cx="12" cy="8" r="6" /><path d="M8.21 13.89L7 22l5-3 5 3-1.21-8.11" /></Icon>;
 const IconX = (p) => <Icon {...p}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></Icon>;
+const IconFilter = (p) => <Icon {...p}><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></Icon>;
 
 /* Nombres de mes en español, usados para el parser de fechas y las etiquetas del calendario */
 const MONTHS_ES_FULL = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -66,8 +68,9 @@ function parseDateForTile(raw) {
   return null;
 }
 
-// Convierte la fecha del informe (acepta "dd/mm/yyyy" o ISO "yyyy-mm-dd") a un
-// timestamp comparable, para poder ordenar la actividad reciente de más nueva a más vieja.
+// Convierte la fecha del informe o de una fecha importante (acepta "dd/mm/yyyy",
+// ISO "yyyy-mm-dd", o "dd de mes") a un timestamp comparable. Se usa para ordenar
+// la actividad reciente y para agrupar/filtrar todo por mes.
 function reportTimestamp(raw) {
   if (!raw) return 0;
   if (raw.includes('/')) {
@@ -75,27 +78,54 @@ function reportTimestamp(raw) {
     const year = y?.length === 2 ? `20${y}` : y;
     return new Date(`${year}-${m?.padStart(2, '0')}-${d?.padStart(2, '0')}`).getTime() || 0;
   }
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return new Date(raw).getTime() || 0;
+  const es = raw.match(/(\d{1,2})\s+de\s+([a-záéíóúñ]+)/i);
+  if (es) {
+    const monthName = es[2].toLowerCase();
+    const idx = MONTHS_ES_FULL.findIndex(m => m.startsWith(monthName) || monthName.startsWith(m.slice(0, 4)));
+    if (idx >= 0) {
+      const year = new Date().getFullYear();
+      return new Date(year, idx, parseInt(es[1], 10)).getTime() || 0;
+    }
+  }
   return new Date(raw).getTime() || 0;
 }
 
-// Histórico de cumplimiento de meses cerrados (registro pasado de la unidad).
-// TODO: reemplazar con los datos reales de meses ya cerrados, p.ej.:
-// [{ month: 'Septiembre', short: 'SEP', value: 86 }, { month: 'Octubre', short: 'OCT', value: 92 }]
-// El mes en curso NO se guarda aquí — se calcula abajo a partir de los informes reales.
-const COMPLIANCE_HISTORY = [];
+// Clave "YYYY-MM" a partir de un timestamp — se usa para agrupar y filtrar por mes.
+function monthKeyFromTs(ts) {
+  if (!ts) return null;
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 
-// Mes en curso, calculado a partir de la fecha real del sistema (no queda fijo en un mes).
-const _now = new Date();
-const CURRENT_MONTH = {
-  month: MONTHS_ES_FULL[_now.getMonth()].charAt(0).toUpperCase() + MONTHS_ES_FULL[_now.getMonth()].slice(1),
-  short: MONTHS_ES_ABBR[_now.getMonth()],
-};
+// Etiqueta legible en español para una clave "YYYY-MM", ej. "2026-10" -> "Octubre" (sin año)
+function monthLabel(key) {
+  const [, m] = key.split('-');
+  const idx = parseInt(m, 10) - 1;
+  const name = MONTHS_ES_FULL[idx] ? MONTHS_ES_FULL[idx].charAt(0).toUpperCase() + MONTHS_ES_FULL[idx].slice(1) : key;
+  return name;
+}
+
+// Abreviatura de 3 letras para una clave "YYYY-MM", ej. "2026-10" -> "OCT"
+function monthShort(key) {
+  const [, m] = key.split('-');
+  const idx = parseInt(m, 10) - 1;
+  return MONTHS_ES_ABBR[idx] || '';
+}
+
+const TODAY_KEY = monthKeyFromTs(Date.now());
+
+// Cuántos informes tiene que tener APROBADOS cada instructor en el mes para
+// considerarse "al día". Ajusta este número si el requisito cambia.
+const REQUIRED_REPORTS_PER_INSTRUCTOR = 2;
 
 export default function UnitView({ userName, onViewChange }) {
   const { colors, theme } = useTheme();
   const isDark = theme === 'dark';
   const [toast, setToast] = useState(null);
   const [dbReports, setDbReports] = useState([]);
+  const [registeredInstructorsCount, setRegisteredInstructorsCount] = useState(0);
   const [dates, setDates] = useState(() => {
     const saved = JSON.parse(localStorage.getItem('sena_dates') || '[]');
     return saved; // TODO: sin fechas de ejemplo; se llenará con lo que el coordinador agregue.
@@ -104,12 +134,38 @@ export default function UnitView({ userName, onViewChange }) {
   const [newDate, setNewDate] = useState({ label: '', date: '', urgent: false });
   const [editingDateId, setEditingDateId] = useState(null); // null = modo "agregar", id = modo "editar"
 
+  /* ============================================================
+     FILTROS DEL PANEL
+     - monthFilter: 'all' (todos los meses) o una clave "YYYY-MM".
+       Es el filtro principal: sincroniza KPIs, instructores, actividad
+       reciente, fechas importantes y la gráfica de cumplimiento — todo
+       responde al mismo mes seleccionado.
+     - activityFilter: 'all' | 'Aprobado' | 'Pendiente' | 'A Corregir'
+       Filtro adicional, solo sobre el estado de "Actividad reciente".
+     ============================================================ */
+  const [monthFilter, setMonthFilter] = useState(TODAY_KEY);
+  const [activityFilter, setActivityFilter] = useState('all');
+
   // Carga los informes reales de la unidad (mismo servicio que usa Compliance.jsx).
   useEffect(() => {
     getReports().then(data => {
       setDbReports(data || []);
     }).catch(console.error);
   }, []);
+
+  // Total real de instructores registrados en el sistema (no solo los que
+  // ya entregaron algún informe). Se cuenta una sola vez, independiente
+  // del filtro de mes, porque "instructores registrados" no cambia mes a mes.
+  useEffect(() => {
+  getAllUsers().then(users => {
+    const count = (users || []).filter(u => {
+      const role = (u.role || '').toLowerCase();
+      const estado = (u.estado || '').toString().trim().toLowerCase();
+      return role === 'instructor' && estado === 'activo';
+    }).length;
+    setRegisteredInstructorsCount(count);
+  }).catch(console.error);
+}, []);
 
   useEffect(() => {
     localStorage.setItem('sena_dates', JSON.stringify(dates));
@@ -160,26 +216,55 @@ export default function UnitView({ userName, onViewChange }) {
     showToast(`Fecha eliminada: ${label}`, BRAND.danger);
   };
 
-  // ── Conteos reales, calculados a partir de los informes de la base de datos ──
-  const approvedCount = dbReports.filter(r => r.status === 'Aprobado').length;
-  const pendingCount = dbReports.filter(r => r.status === 'Pendiente').length;
-  const correctionCount = dbReports.filter(r => r.status === 'A Corregir').length;
-
-  // "Total instructores": mientras no exista un servicio de usuarios propio,
-  // se aproxima contando instructores únicos que ya tienen al menos un informe.
-  // TODO: si tienes getUsers()/usersService, reemplaza esto por el conteo real
-  // de instructores registrados (no solo los que ya entregaron algo).
-  // Ajusta el nombre del campo si en tu base de datos no se llama "instructorName".
-  const instructorSet = new Set(
-    dbReports
-      .map(r => r.instructorName || r.instructor || r.userName || r.author || r.userId)
-      .filter(Boolean)
+  /* ============================================================
+     LISTA DE MESES DISPONIBLES PARA EL SELECTOR
+     Se arma con los meses que realmente tienen informes o fechas
+     registradas, más el mes actual (para que siempre se pueda elegir
+     "hoy" aunque todavía no haya datos). Se ordena del más reciente
+     al más antiguo.
+     ============================================================ */
+  const currentYear = new Date().getFullYear();
+  const monthKeysSet = new Set(
+    // Los 12 meses del año en curso siempre están disponibles, aunque no tengan informes todavía.
+    Array.from({ length: 12 }, (_, i) => `${currentYear}-${String(i + 1).padStart(2, '0')}`)
   );
-  const instructorsCount = instructorSet.size;
+  monthKeysSet.add(TODAY_KEY);
+  // Si hay informes o fechas de otros años, esos meses también se agregan a la lista.
+  dbReports.forEach(r => {
+    const key = monthKeyFromTs(reportTimestamp(r.date));
+    if (key) monthKeysSet.add(key);
+  });
+  dates.forEach(d => {
+    const key = monthKeyFromTs(reportTimestamp(d.date));
+    if (key) monthKeysSet.add(key);
+  });
+  const availableMonthKeys = Array.from(monthKeysSet).sort(); // ascendente, se usa también para la gráfica
+  const availableMonthKeysDesc = [...availableMonthKeys].reverse(); // para el <select>, más reciente primero
 
-  // KPIs de la unidad, ya conectados a los informes reales.
+  // ── Informes filtrados por el mes elegido (o todos) — alimentan KPIs, instructores y actividad ──
+  const filteredReports = monthFilter === 'all'
+    ? dbReports
+    : dbReports.filter(r => monthKeyFromTs(reportTimestamp(r.date)) === monthFilter);
+
+  // ── Conteos reales ──
+  const approvedCount = filteredReports.filter(r => r.status === 'Aprobado').length;
+  const pendingCount = filteredReports.filter(r => r.status === 'Pendiente').length;
+  const correctionCount = filteredReports.filter(r => r.status === 'A Corregir').length;
+
+  // Nombre de instructor a partir de un informe (mismo criterio en todo el panel).
+  // Ajusta el nombre del campo si en tu base de datos no se llama "instructorName".
+  const getInstructorName = (r) => r.instructorName || r.instructor || r.userName || r.author || r.userId;
+
+  // Roster completo de instructores (histórico, todos los meses), usado como
+  // denominador del cumplimiento: así el número de instructores es siempre el
+  // real de tus datos, nunca un valor fijo.
+  const allInstructorNames = Array.from(new Set(dbReports.map(getInstructorName).filter(Boolean)));
+
+  // KPIs de la unidad, ya conectados a los informes reales y al mes filtrado.
+  // "Total instructores" usa el conteo real de instructores registrados en el
+  // sistema (registeredInstructorsCount), no solo los que ya entregaron algo.
   const stats = [
-    { key: 'instructors', icon: IconUsers,        value: instructorsCount, label: 'Total instructores',    accent: BRAND.greenMid,   bg: greenBg,  target: 'user-management' },
+    { key: 'instructors', icon: IconUsers,        value: registeredInstructorsCount, label: 'Total instructores',    accent: BRAND.greenMid,   bg: greenBg,  target: 'user-management' },
     { key: 'approved',    icon: IconCheckCircle,  value: approvedCount,    label: 'Informes aprobados',     accent: BRAND.greenSoft,  bg: greenBg,  target: 'report-management' },
     { key: 'pending',     icon: IconClock,        value: pendingCount,     label: 'Pendientes de revisión', accent: BRAND.orangeMid,  bg: orangeBg, target: 'report-management' },
     { key: 'alerts',      icon: IconAlertTriangle, value: correctionCount, label: 'Con alertas',            accent: BRAND.danger,     bg: dangerBg, target: 'compliance' },
@@ -192,12 +277,13 @@ export default function UnitView({ userName, onViewChange }) {
     corrected: { color: BRAND.danger,    bg: dangerBg, Icon: IconAlertTriangle },
   };
 
-  // Actividad reciente real: últimos informes entregados, ordenados por fecha descendente.
-  const recentActivity = [...dbReports]
+  // Actividad reciente: informes del mes filtrado, con filtro opcional de estado, ordenados por fecha descendente.
+  const recentActivity = [...filteredReports]
+    .filter(r => activityFilter === 'all' || r.status === activityFilter)
     .sort((a, b) => reportTimestamp(b.date) - reportTimestamp(a.date))
     .slice(0, 6)
     .map(r => {
-      const name = r.instructorName || r.instructor || r.userName || r.author || 'Instructor';
+      const name = getInstructorName(r) || 'Instructor';
       const kind = r.status === 'Aprobado' ? 'done' : r.status === 'A Corregir' ? 'corrected' : 'pending';
       const action = r.status === 'Aprobado'
         ? `Informe ${r.type || ''} aprobado`
@@ -207,15 +293,63 @@ export default function UnitView({ userName, onViewChange }) {
       return { name, action, time: r.date || '', kind };
     });
 
-  // El cumplimiento del mes en curso sale de los informes reales (aprobados / total gestionado),
-  // no de un número escrito a mano — así la tarjeta y el gráfico siempre reflejan los datos reales.
-  const managedCount = approvedCount + pendingCount;
-  const currentMonthValue = managedCount > 0 ? Math.round((approvedCount / managedCount) * 100) : 0;
+  // Fechas importantes del mes filtrado (o todas).
+  const filteredDates = monthFilter === 'all'
+    ? dates
+    : dates.filter(d => monthKeyFromTs(reportTimestamp(d.date)) === monthFilter);
 
-  const compliance = [...COMPLIANCE_HISTORY, { ...CURRENT_MONTH, value: currentMonthValue }];
+  /* ============================================================
+     CUMPLIMIENTO — calculado mes a mes con datos reales.
+
+     Regla de negocio: cada instructor debe tener REQUIRED_REPORTS_PER_INSTRUCTOR
+     (2) informes APROBADOS en el mes para estar "al día". El cumplimiento NO es
+     todo-o-nada por instructor: se calcula sobre el total de informes requeridos
+     en la unidad (instructores × 2), así que cada informe aprobado suma su parte
+     proporcional al porcentaje general.
+
+     Ejemplo: 10 instructores → 20 informes requeridos. Si solo se aprueba 1,
+     el cumplimiento es 1/20 = 5%. El número de instructores es siempre el real
+     (allInstructorNames), nunca un valor fijo.
+     ============================================================ */
+  const reportsByMonth = {};
+  dbReports.forEach(r => {
+    const key = monthKeyFromTs(reportTimestamp(r.date));
+    if (!key) return;
+    if (!reportsByMonth[key]) reportsByMonth[key] = [];
+    reportsByMonth[key].push(r);
+  });
+
+  const complianceForKey = (key) => {
+    const reports = reportsByMonth[key] || [];
+    const totalInstructors = allInstructorNames.length;
+    const totalRequired = totalInstructors * REQUIRED_REPORTS_PER_INSTRUCTOR;
+
+    const approved = reports.filter(r => r.status === 'Aprobado').length;
+    const pending = reports.filter(r => r.status === 'Pendiente').length;
+    const correction = reports.filter(r => r.status === 'A Corregir').length;
+
+    const value = totalRequired > 0 ? Math.min(100, Math.round((approved / totalRequired) * 100)) : 0;
+
+    return {
+      key,
+      month: monthLabel(key),
+      short: monthShort(key),
+      value,
+      approved,
+      pending,
+      correction,
+      totalInstructors,
+      totalRequired,
+    };
+  };
+
+  // Tendencia completa (todos los meses con datos, más el mes actual), ordenada cronológicamente.
+  const complianceAll = availableMonthKeys.map(complianceForKey);
+
+  // Si se filtra por un mes específico, la gráfica muestra solo ese mes.
+  const compliance = monthFilter === 'all' ? complianceAll : [complianceForKey(monthFilter)];
 
   const currentCompliance = compliance[compliance.length - 1].value;
-  // Si aún no hay histórico de meses anteriores, no hay con qué comparar.
   const previousEntry = compliance.length > 1 ? compliance[compliance.length - 2] : null;
   const previousCompliance = previousEntry ? previousEntry.value : null;
   const delta = previousCompliance !== null ? currentCompliance - previousCompliance : 0;
@@ -223,6 +357,8 @@ export default function UnitView({ userName, onViewChange }) {
   const hasComparison = previousEntry !== null;
   const avgCompliance = Math.round(compliance.reduce((sum, c) => sum + c.value, 0) / compliance.length);
   const best = compliance.reduce((a, b) => (b.value > a.value ? b : a));
+  const lastEntry = compliance[compliance.length - 1];
+  const lastIsLive = lastEntry?.key === TODAY_KEY;
 
   // Geometría del gráfico — curva suavizada (Bezier) en vez de líneas rectas, en una grilla de mayor resolución.
   const chartW = 300, chartH = 132, padX = 22, padY = 22;
@@ -255,7 +391,22 @@ export default function UnitView({ userName, onViewChange }) {
 
   const comparisonLabel = hasComparison
     ? `${deltaPositive ? '+' : ''}${delta}% vs. ${previousEntry.month.toLowerCase()}`
-    : 'Sin mes anterior registrado';
+    : monthFilter === 'all'
+      ? 'Sin mes anterior registrado'
+      : 'Mes único seleccionado';
+
+  // Estilo reutilizable para los <select> de la barra de filtros
+  const filterSelectStyle = {
+    padding: '8px 12px',
+    borderRadius: 8,
+    border: `1px solid ${colors.border}`,
+    background: colors.card,
+    color: colors.text,
+    fontSize: 12.5,
+    fontWeight: 600,
+    cursor: 'pointer',
+    outline: 'none',
+  };
 
   return (
     <div style={{ fontFamily: "'Inter','Segoe UI',sans-serif", color: colors.text }}>
@@ -302,7 +453,7 @@ export default function UnitView({ userName, onViewChange }) {
           </div>
         </div>
 
-        {/* Aro de cumplimiento con variación real vs. mes anterior */}
+        {/* Aro de cumplimiento — refleja el mes filtrado, con variación vs. el mes anterior cuando aplica */}
         <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <svg width="128" height="128" viewBox="0 0 100 100">
             <circle cx="50" cy="50" r={ringR} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="9" />
@@ -323,7 +474,35 @@ export default function UnitView({ userName, onViewChange }) {
             {hasComparison && (deltaPositive ? <IconTrendUp size={12} /> : <IconTrendDown size={12} />)}
             {comparisonLabel}
           </span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>
+            {lastEntry.approved}/{lastEntry.totalRequired} informes aprobados
+          </span>
         </div>
+      </div>
+
+      {/* ============ BARRA DE FILTROS ============ */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        background: colors.card, border: `1px solid ${colors.border}`, borderRadius: 12,
+        padding: '12px 16px', marginBottom: 18,
+      }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, color: colors.textSecondary, marginRight: 4 }}>
+          <IconFilter size={14} /> Filtros:
+        </span>
+
+        <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)} style={filterSelectStyle} title="Mes a mostrar en todo el panel">
+          <option value="all">Todos los meses</option>
+          {availableMonthKeysDesc.map(key => (
+            <option key={key} value={key}>{monthLabel(key)}</option>
+          ))}
+        </select>
+
+        <select value={activityFilter} onChange={e => setActivityFilter(e.target.value)} style={filterSelectStyle} title="Estado de la actividad reciente">
+          <option value="all">Toda la actividad</option>
+          <option value="Aprobado">aprobados</option>
+          <option value="Pendiente">pendientes</option>
+          <option value="A Corregir">Solo con corrección</option>
+        </select>
       </div>
 
       {/* ============ TARJETAS KPI ============ */}
@@ -362,7 +541,9 @@ export default function UnitView({ userName, onViewChange }) {
             <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>Últimas acciones de tus instructores</div>
           </div>
           {recentActivity.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '28px 0', color: colors.textMuted, fontSize: 13 }}>Aún no hay actividad reciente</div>
+            <div style={{ textAlign: 'center', padding: '28px 0', color: colors.textMuted, fontSize: 13 }}>
+              {dbReports.length === 0 ? 'Aún no hay actividad reciente' : 'No hay actividad que coincida con los filtros'}
+            </div>
           ) : (
             <div style={{ position: 'relative' }}>
               <div style={{ position: 'absolute', left: 14, top: 6, bottom: 6, width: 2, background: colors.border }} />
@@ -401,7 +582,7 @@ export default function UnitView({ userName, onViewChange }) {
             </button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {dates.map((d) => {
+            {filteredDates.map((d) => {
               const tile = parseDateForTile(d.date);
               return (
                 <div key={d.id} style={{ background: colors.bg, borderRadius: 10, padding: '12px 14px', border: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -443,14 +624,16 @@ export default function UnitView({ userName, onViewChange }) {
                 </div>
               );
             })}
-            {dates.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '28px 0', color: colors.textMuted, fontSize: 13 }}>No hay fechas registradas</div>
+            {filteredDates.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '28px 0', color: colors.textMuted, fontSize: 13 }}>
+                {dates.length === 0 ? 'No hay fechas registradas' : 'No hay fechas en el mes seleccionado'}
+              </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* ============ CUMPLIMIENTO — tendencia trimestral (basada en datos reales) ============ */}
+      {/* ============ CUMPLIMIENTO — sincronizado con el mes filtrado ============ */}
       <div style={{ background: colors.card, borderRadius: 14, padding: '24px 28px', border: `1px solid ${colors.border}`, boxShadow: isDark ? 'none' : '0 1px 4px rgba(0,0,0,0.04)', position: 'relative', overflow: 'hidden' }}>
         <style>{`
           @keyframes senaDrawLine { from { stroke-dashoffset: 480; } to { stroke-dashoffset: 0; } }
@@ -463,7 +646,10 @@ export default function UnitView({ userName, onViewChange }) {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
           <div>
             <div style={{ fontWeight: 700, fontSize: 15, color: colors.text }}>Tendencia de cumplimiento</div>
-            <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>Calculada a partir de los informes aprobados y pendientes de la unidad</div>
+            <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
+              {monthFilter === 'all' ? 'Todos los meses con informes registrados' : `Mostrando solo ${monthLabel(monthFilter)}`}
+              {' · '}{lastEntry.totalInstructors} instructor{lastEntry.totalInstructors !== 1 ? 'es' : ''} · {REQUIRED_REPORTS_PER_INSTRUCTOR} informes c/u
+            </div>
           </div>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, color: deltaPositive ? BRAND.greenSoft : BRAND.orangeMid, background: deltaPositive ? greenBg : orangeBg, borderRadius: 20, padding: '6px 13px' }}>
             {hasComparison && (deltaPositive ? <IconTrendUp size={13} /> : <IconTrendDown size={13} />)}
@@ -471,22 +657,36 @@ export default function UnitView({ userName, onViewChange }) {
           </span>
         </div>
 
-        {/* Resumen rápido: mes actual / promedio / mejor mes */}
+        {/* Desglose por estado del mes mostrado (o último) — aprobados / pendientes / por corrección */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: BRAND.greenSoft, background: greenBg, borderRadius: 20, padding: '5px 12px' }}>
+            <IconCheckCircle size={13} /> {lastEntry.approved} Aprobados
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: BRAND.orangeMid, background: orangeBg, borderRadius: 20, padding: '5px 12px' }}>
+            <IconClock size={13} /> {lastEntry.pending} Por revisar
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: isDark ? '#f87171' : BRAND.danger, background: dangerBg, borderRadius: 20, padding: '5px 12px' }}>
+            <IconAlertTriangle size={13} /> {lastEntry.correction} Por corrección
+          </span>
+        </div>
+
+        {/* Resumen rápido: mes mostrado (o último) / promedio / mejor mes, dentro del rango filtrado */}
         <div style={{ display: 'flex', gap: 10, marginBottom: 24, flexWrap: 'wrap' }}>
           {[
-            { label: `${CURRENT_MONTH.month} (actual, en vivo)`, value: currentCompliance, accent: BRAND.orangeMid, bg: orangeBg },
-            { label: 'Promedio trimestral', value: avgCompliance, accent: BRAND.greenMid, bg: greenBg },
-            { label: `Mejor mes · ${best.month}`, value: best.value, accent: BRAND.greenSoft, bg: greenBg },
+            { label: `${lastEntry.month}${lastIsLive ? ' (en vivo)' : ''}`, value: currentCompliance, accent: BRAND.orangeMid, bg: orangeBg, detail: `${lastEntry.approved}/${lastEntry.totalRequired} informes` },
+            { label: monthFilter === 'all' ? 'Promedio de todos los meses' : 'Este mes', value: avgCompliance, accent: BRAND.greenMid, bg: greenBg },
+            { label: `Mejor mes · ${best.month}`, value: best.value, accent: BRAND.greenSoft, bg: greenBg, detail: `${best.approved}/${best.totalRequired} informes` },
           ].map((m, i) => (
             <div key={m.label} className="sena-fade-up" style={{ animationDelay: `${i * 90}ms`, flex: '1 1 160px', background: m.bg, borderRadius: 12, padding: '13px 16px' }}>
               <div style={{ fontSize: 24, fontWeight: 800, color: m.accent, letterSpacing: '-0.5px', fontVariantNumeric: 'tabular-nums' }}>{m.value}%</div>
               <div style={{ fontSize: 11.5, color: colors.textSecondary, marginTop: 3, fontWeight: 600 }}>{m.label}</div>
+              {m.detail && <div style={{ fontSize: 10.5, color: colors.textMuted, marginTop: 2 }}>{m.detail}</div>}
             </div>
           ))}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 36, flexWrap: 'wrap' }}>
-          {/* Curva suavizada de tendencia */}
+          {/* Curva suavizada de tendencia (uno o varios puntos, según el filtro de mes) */}
           <div style={{ flex: '1 1 300px', minWidth: 260 }}>
             <svg viewBox={`0 0 ${chartW} ${chartH}`} width="100%" height="180" preserveAspectRatio="xMidYMid meet">
               <defs>
@@ -518,31 +718,32 @@ export default function UnitView({ userName, onViewChange }) {
               {linePath && <path d={linePath} className="sena-trend-line" fill="none" stroke="url(#complianceStroke)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" filter="url(#complianceGlow)" />}
 
               {pointsXY.map((p, i) => {
-                const isCurrent = i === pointsXY.length - 1;
+                const isLast = i === pointsXY.length - 1;
+                const isLive = p.key === TODAY_KEY;
                 return (
-                  <g key={i}>
-                    {isCurrent && (
+                  <g key={p.key}>
+                    {isLive && (
                       <circle cx={p.x} cy={p.y} r="5" fill="none" stroke={BRAND.orangeMid} strokeWidth="2" style={{ animation: 'senaPulseRing 1.8s ease-out infinite', transformOrigin: `${p.x}px ${p.y}px` }} />
                     )}
-                    <circle cx={p.x} cy={p.y} r={isCurrent ? 5 : 4} fill={colors.card} stroke={isCurrent ? BRAND.orangeMid : BRAND.greenMid} strokeWidth="2.4" />
+                    <circle cx={p.x} cy={p.y} r={isLive ? 5 : 4} fill={colors.card} stroke={isLive ? BRAND.orangeMid : BRAND.greenMid} strokeWidth="2.4" />
                     <text x={p.x} y={p.y - 13} textAnchor="middle" fontSize="12" fontWeight="800" fill={colors.text}>{p.value}%</text>
-                    <text x={p.x} y={chartH - 2} textAnchor="middle" fontSize="9.5" fontWeight="700" fill={isCurrent ? BRAND.orangeMid : colors.textMuted} letterSpacing="0.05em">{p.short}</text>
+                    <text x={p.x} y={chartH - 2} textAnchor="middle" fontSize="9.5" fontWeight="700" fill={isLive ? BRAND.orangeMid : colors.textMuted} letterSpacing="0.05em">{p.short}</text>
                   </g>
                 );
               })}
             </svg>
           </div>
 
-          {/* Anillos por mes, con variación respecto al mes anterior */}
+          {/* Anillos por mes — uno solo si hay un mes filtrado, o todos si se eligió "Todos los meses" */}
           <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap', paddingBottom: 8 }}>
             {compliance.map((c, i) => {
-              const isCurrent = i === compliance.length - 1;
+              const isLive = c.key === TODAY_KEY;
               const prev = compliance[i - 1];
               const monthDelta = prev ? c.value - prev.value : null;
               const size = 76, strokeW = 7, r = (size - strokeW) / 2, circ = 2 * Math.PI * r;
-              const ringColor = isCurrent ? BRAND.orangeMid : BRAND.greenMid;
+              const ringColor = isLive ? BRAND.orangeMid : BRAND.greenMid;
               return (
-                <div key={c.month} className="sena-fade-up" style={{ animationDelay: `${300 + i * 110}ms`, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                <div key={c.key} className="sena-fade-up" style={{ animationDelay: `${300 + i * 110}ms`, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
                   <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
                     <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={colors.bg} strokeWidth={strokeW} />
                     <circle
@@ -552,7 +753,8 @@ export default function UnitView({ userName, onViewChange }) {
                     />
                     <text x="50%" y="52%" textAnchor="middle" dominantBaseline="middle" fontSize="15" fontWeight="800" fill={colors.text}>{c.value}%</text>
                   </svg>
-                  <div style={{ fontSize: 11.5, fontWeight: 700, color: isCurrent ? BRAND.orangeMid : colors.textSecondary }}>{isCurrent ? `${c.short} · hoy` : c.short}</div>
+                  <div style={{ fontSize: 11.5, fontWeight: 700, color: isLive ? BRAND.orangeMid : colors.textSecondary }}>{isLive ? `${c.short} · hoy` : c.short}</div>
+                  <div style={{ fontSize: 10, color: colors.textMuted, fontWeight: 600 }}>{c.approved}/{c.totalRequired} informes</div>
                   {monthDelta !== null && (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 700, color: monthDelta >= 0 ? BRAND.greenSoft : BRAND.orangeMid }}>
                       {monthDelta >= 0 ? <IconTrendUp size={9} /> : <IconTrendDown size={9} />}
