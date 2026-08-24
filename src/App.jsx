@@ -15,6 +15,7 @@ function App() {
     }
   });
   const [pendingUsers, setPendingUsers] = useState([]);
+  const [notifications, setNotifications] = useState([]);
 
   const handleLogin = (userData) => {
     setUser(userData);
@@ -40,12 +41,14 @@ function App() {
         user.role === 'instructor' ? (
           <InstructorDashboard user={user} onLogout={handleLogout} />
         ) : (
-          <CoordinatorDashboard
-            user={user}
-            onLogout={handleLogout}
+        <CoordinatorDashboard
+         user={user}
+          onLogout={handleLogout}
             pendingUsers={pendingUsers}
-            setPendingUsers={setPendingUsers}
-          />
+             setPendingUsers={setPendingUsers}
+                notifications={notifications}
+                setNotifications={setNotifications}
+                />
         )
       ) : (
         <LoginScreen onLogin={handleLogin} />
