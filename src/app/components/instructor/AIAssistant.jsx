@@ -2,6 +2,8 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useTheme } from '../../../ThemeContext';
 import apiClient from '../../../services/apiClient';
 import { enviarMensajeZoe } from '../../../services/zoeService';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 // Colores institucionales — los mismos tonos que ya usa el resto del
 // panel (sidebar del Coordinador): verdes forestales profundos y naranja

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Component } from 'react';
 import { useTheme } from '../../../ThemeContext';
 import { getReports, deleteReport, getReportTraceability } from '../../../services/reportsService';
 import jsPDF from 'jspdf';
@@ -323,10 +323,54 @@ function renderDocPageBody(pageNum, report) {
   }
 }
 
+// ── Red de seguridad: si algo dentro del visor de documento lanza un
+// error (datos con forma inesperada, etc.), en vez de dejar la pestaña
+// completamente en blanco mostramos un aviso claro y el detalle técnico,
+// para poder diagnosticarlo sin que la pantalla se quede vacía.
+class DocumentViewerErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  componentDidCatch(error, info) {
+    console.error('Error al renderizar el visor de documento:', error, info);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{
+          height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center',
+          justifyContent: 'center', gap: 10, padding: 24, textAlign: 'center', color: '#6B7280',
+          background: '#F7F9FC', borderRadius: 8,
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>No se pudo cargar el documento</div>
+          <div style={{ fontSize: 12, maxWidth: 380 }}>
+            Hubo un problema mostrando este informe. Intenta cerrar y volver a abrirlo; si sigue fallando, avísale a soporte con este detalle:
+          </div>
+          <code style={{ fontSize: 11, color: '#B91C1C', background: '#FEF2F2', padding: '6px 10px', borderRadius: 6, maxWidth: 380, overflowWrap: 'break-word' }}>
+            {String(this.state.error?.message || this.state.error)}
+          </code>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ── Visor de documento de solo lectura, con las mismas marcas
 // (resaltado / tachón / comentario) que dejó el coordinador al revisar.
 function ReadOnlyDocumentViewer({ report }) {
-  const totalPages = report.filePages;
+  // ── Blindaje: si filePages llega como algo que no sea un número
+  // entero positivo (undefined, NaN, string no numérico, 0, negativo),
+  // Array.from({ length }) puede lanzar un RangeError y tumbar todo el
+  // árbol de React sin aviso, dejando la pestaña en blanco. Por eso
+  // siempre normalizamos a un entero válido antes de generar las páginas.
+  const rawPages = Number(report?.filePages);
+  const totalPages = Number.isFinite(rawPages) && rawPages > 0 ? Math.floor(rawPages) : 1;
+  const safeMarcas = Array.isArray(report?.marcas) ? report.marcas : [];
   const pages = Array.from({ length: totalPages }, (_, i) => i + 1);
 
   return (
@@ -371,7 +415,7 @@ function ReadOnlyDocumentViewer({ report }) {
               <span>{report.rawDate}</span>
             </div>
 
-            <ReadOnlyAnnotationLayer pageNum={pageNum} annotations={report.marcas} />
+            <ReadOnlyAnnotationLayer pageNum={pageNum} annotations={safeMarcas} />
           </div>
         ))}
       </div>
@@ -463,12 +507,15 @@ export default function UnitView({ userName }) {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // ── Cada vez que se abre un informe distinto, arrancamos en la pestaña
-  // "Ver Documento" para que lo primero que vea el instructor sean las
-  // marcas del revisor.
-  useEffect(() => {
-    setModalTab('doc');
-  }, [selectedReport?.id]);
+  // ── Abre el modal de un informe en la pestaña indicada. Antes había un
+  // useEffect que reseteaba modalTab a 'doc' cada vez que cambiaba
+  // selectedReport, así que el botón "Detalles" abría el modal pero
+  // siempre te dejaba viendo el visor de documento en vez de la pestaña
+  // de Detalles. Ahora el tab se decide explícitamente al abrir.
+  const openReportModal = (report, tab = 'doc') => {
+    setSelectedReport(report);
+    setModalTab(tab);
+  };
 
   // ── Cuando se abre el modal de un informe, trae su trazabilidad real
   // y toma la observación más reciente (idealmente la que corresponde
@@ -567,8 +614,10 @@ export default function UnitView({ userName }) {
   const mappedDb = dbReports.map(r => {
     const normStatus = normalizeStatus(r.status);
     const marcas = Array.isArray(r.marcas) ? r.marcas : [];
-    const maxMarkPage = marcas.length ? Math.max(...marcas.map(m => m.page || 1)) : 1;
-    const filePages = Math.max(r.filePages || 3, maxMarkPage);
+    const maxMarkPage = marcas.length ? Math.max(...marcas.map(m => Number(m.page) || 1)) : 1;
+    const rawFilePages = Number(r.filePages);
+    const basePages = Number.isFinite(rawFilePages) && rawFilePages > 0 ? rawFilePages : 3;
+    const filePages = Math.max(basePages, maxMarkPage, 1);
     return {
       id: r.id,
       name: `Informe ${r.type.toUpperCase()} - ${r.month}`,
@@ -886,11 +935,6 @@ export default function UnitView({ userName }) {
     </button>
   );
 
-  const IconEye = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" /><circle cx="12" cy="12" r="3" />
-    </svg>
-  );
   const IconDownload = () => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M4 21h16" />
@@ -973,7 +1017,9 @@ export default function UnitView({ userName }) {
             {modalTab === 'doc' ? (
               <div style={{ flex: 1, minHeight: 0, padding: isMobile ? '14px 16px' : '16px 20px', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ borderRadius: 10, border: `1px solid ${colors.border}`, flex: 1, minHeight: 0, overflow: 'hidden' }}>
-                  <ReadOnlyDocumentViewer report={selectedReport} />
+                  <DocumentViewerErrorBoundary key={selectedReport.id}>
+                    <ReadOnlyDocumentViewer report={selectedReport} />
+                  </DocumentViewerErrorBoundary>
                 </div>
               </div>
             ) : (
@@ -1122,9 +1168,8 @@ export default function UnitView({ userName }) {
                 </div>
                 <span style={S.badge(r.color)}>{r.status}</span>
                 <div style={{ display: 'flex', gap: 6, marginLeft: isMobile ? 'auto' : 0 }}>
-                  <ActionButton title="Ver" onClick={() => setSelectedReport(r)}><IconEye /></ActionButton>
                   <ActionButton title="Descargar" onClick={() => handleDownload(r)}><IconDownload /></ActionButton>
-                  <ActionButton title="Detalles" onClick={() => setSelectedReport(r)}><IconInfo /></ActionButton>
+                  <ActionButton title="Detalles" onClick={() => openReportModal(r, 'info')}><IconInfo /></ActionButton>
                   <ActionButton title="Borrar" danger onClick={() => handleDelete(r)}><IconTrash /></ActionButton>
                 </div>
               </div>

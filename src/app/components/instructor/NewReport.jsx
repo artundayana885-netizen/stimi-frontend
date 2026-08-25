@@ -54,6 +54,10 @@ export default function NewReport() {
   const iconBoxBorder = theme === 'dark' ? '#1F4A2E' : '#bbf7d0';
   const infoBg = theme === 'dark' ? colors.bgAlt : '#F9FAFB';
 
+  // ── Tabs de navegación (NO son botones de acción) ──────────────────────
+  // Estilo "underline": texto + línea inferior, sin relleno sólido,
+  // para que se lea claramente como cambio de vista y no como una acción
+  // tipo "guardar" o "enviar".
   const tabBtn = (key, label, Icon) => {
     const active = tab === key;
     return (
@@ -61,10 +65,11 @@ export default function NewReport() {
         onClick={() => setTab(key)}
         style={{
           display: 'flex', alignItems: 'center', gap: 7,
-          padding: '9px 18px', borderRadius: 10, border: 'none', cursor: 'pointer',
-          fontSize: 13.5, fontWeight: 700, transition: 'all .2s',
-          background: active ? 'linear-gradient(135deg, #39A900, #2d8400)' : 'transparent',
-          color: active ? '#fff' : colors.textMuted,
+          padding: '10px 4px', border: 'none', background: 'transparent',
+          cursor: 'pointer', fontSize: 13.5, fontWeight: 600,
+          color: active ? '#39A900' : colors.textMuted,
+          borderBottom: active ? '2.5px solid #39A900' : '2.5px solid transparent',
+          borderRadius: 0, transition: 'all .2s',
         }}
       >
         <Icon size={14} /> {label}
@@ -94,7 +99,7 @@ export default function NewReport() {
             {tab === 'nuevo' ? 'Selecciona el tipo de informe y carga el documento ya diligenciado' : 'Organizados automáticamente en carpetas por mes de radicación'}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 6, background: infoBg, borderRadius: 12, padding: 5, border: `1px solid ${colors.border}` }}>
+        <div style={{ display: 'flex', gap: 20, borderBottom: `1px solid ${colors.border}` }}>
           {tabBtn('nuevo', 'Nuevo informe', IconPlus)}
           {tabBtn('carpetas', 'Mis carpetas', IconFolder)}
         </div>

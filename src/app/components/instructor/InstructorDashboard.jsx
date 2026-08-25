@@ -76,10 +76,12 @@ const NavIcon = {
 
 function SidebarInstructor({ activeView, onViewChange, onLogout, userName, collapsed, onToggleCollapse, mobile, onClose }) {
   const { colors } = useTheme();
+  const [hovered, setHovered] = useState(false); // hover para expandir temporalmente
   const initials = userName?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'IN';
 
   // En móvil el menú siempre va expandido — colapsar no tiene sentido en un drawer angosto.
-  const isCollapsed = mobile ? false : collapsed;
+  // En escritorio: si está colapsado pero el mouse está encima, se muestra expandido.
+  const isCollapsed = mobile ? false : (collapsed && !hovered);
 
   const principalItems = [
     { key: 'unit',          label: 'Mi Unidad',      Icon: NavIcon.Home },
@@ -127,15 +129,19 @@ function SidebarInstructor({ activeView, onViewChange, onLogout, userName, colla
   };
 
   return (
-    <aside style={{
-      width: mobile ? MOBILE_DRAWER_WIDTH : (isCollapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH),
-      minWidth: mobile ? MOBILE_DRAWER_WIDTH : (isCollapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH),
-      borderRight: `1px solid ${colors.border}`, background: colors.card,
-      display: 'flex', flexDirection: 'column', height: '100vh',
-      position: mobile ? 'relative' : 'sticky', top: 0,
-      transition: 'width .2s ease, min-width .2s ease, background .2s, border-color .2s',
-      overflow: 'hidden',
-    }}>
+    <aside
+      onMouseEnter={() => !mobile && setHovered(true)}
+      onMouseLeave={() => !mobile && setHovered(false)}
+      style={{
+        width: mobile ? MOBILE_DRAWER_WIDTH : (isCollapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH),
+        minWidth: mobile ? MOBILE_DRAWER_WIDTH : (isCollapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH),
+        borderRight: `1px solid ${colors.border}`, background: colors.card,
+        display: 'flex', flexDirection: 'column', height: '100vh',
+        position: mobile ? 'relative' : 'sticky', top: 0,
+        transition: 'width .2s ease, min-width .2s ease, background .2s, border-color .2s',
+        overflow: 'hidden',
+      }}
+    >
       {/* Logo + botón colapsar / cerrar */}
       <div style={{ padding: isCollapsed ? '24px 0 20px' : '26px 20px 20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: isCollapsed ? 'center' : 'space-between', gap: 10 }}>
@@ -271,7 +277,7 @@ function MobileTopBar({ onMenuClick, colors }) {
 export default function InstructorDashboard({ user, onLogout }) {
   const { colors } = useTheme();
   const [activeView, setActiveView] = useState('unit');
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true); // arranca colapsado; el hover lo expande
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1280);
 
