@@ -13,6 +13,15 @@ COPY . .
 ARG VITE_API_BASE_URL=https://stimii-backend.7niwok.easypanel.host
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
+ARG VITE_ZOE_WEBHOOK_URL=https://ia-whatsapp-n8n.7niwok.easypanel.host/webhook/zoe/chat
+ENV VITE_ZOE_WEBHOOK_URL=$VITE_ZOE_WEBHOOK_URL
+
+ARG VITE_ZOE_REVISAR_GC_URL=https://ia-whatsapp-n8n.7niwok.easypanel.host/webhook/revisar-gc
+ENV VITE_ZOE_REVISAR_GC_URL=$VITE_ZOE_REVISAR_GC_URL
+
+ARG VITE_ZOE_REVISAR_GF_URL=https://ia-whatsapp-n8n.7niwok.easypanel.host/webhook/revisar-gf
+ENV VITE_ZOE_REVISAR_GF_URL=$VITE_ZOE_REVISAR_GF_URL
+
 RUN npm run build
 
 # ============================

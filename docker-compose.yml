@@ -55,6 +55,9 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: http://localhost:3000
+        VITE_ZOE_WEBHOOK_URL: ${VITE_ZOE_WEBHOOK_URL}
+        VITE_ZOE_REVISAR_GC_URL: ${VITE_ZOE_REVISAR_GC_URL}
+        VITE_ZOE_REVISAR_GF_URL: ${VITE_ZOE_REVISAR_GF_URL}
     container_name: stimi-frontend
     restart: always
     depends_on:
