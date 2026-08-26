@@ -12,6 +12,11 @@ const EXPANDED_WIDTH = 236;
 const MOBILE_DRAWER_WIDTH = 250;
 const MOBILE_BREAKPOINT = 768;
 
+// Mismo evento y clave de localStorage que usa SettingsView.jsx para la foto de perfil.
+// Así el sidebar se mantiene sincronizado sin recargar la página.
+const AVATAR_EVENT = 'sena-avatar-changed';
+const getAvatarKey = (email) => `sena_avatar_${email || 'default'}`;
+
 // ── Íconos de línea fina, monocromo, trazo consistente ──────────────────
 const NavIcon = {
   Home: (p) => (
@@ -74,9 +79,26 @@ const NavIcon = {
   ),
 };
 
-function SidebarInstructor({ activeView, onViewChange, onLogout, userName, collapsed, onToggleCollapse, mobile, onClose }) {
+function SidebarInstructor({ activeView, onViewChange, onLogout, userName, userEmail, collapsed, onToggleCollapse, mobile, onClose }) {
   const { colors } = useTheme();
   const [hovered, setHovered] = useState(false); // hover para expandir temporalmente
+
+  // Foto de perfil: se lee de localStorage al montar (misma clave que usa
+  // SettingsView.jsx), así que aparece de inmediato aunque se recargue la
+  // página. Solo cambia cuando el usuario la sube o la borra en Configuración.
+  const [avatarUrl, setAvatarUrl] = useState(() => localStorage.getItem(getAvatarKey(userEmail)) || null);
+
+  // Si cambia el usuario (login distinto) o si se sube/borra la foto desde
+  // SettingsView, el sidebar se actualiza en vivo sin necesidad de recargar.
+  useEffect(() => {
+    setAvatarUrl(localStorage.getItem(getAvatarKey(userEmail)) || null);
+    const onAvatarChanged = (e) => {
+      if (e.detail?.email === userEmail) setAvatarUrl(e.detail.avatarUrl);
+    };
+    window.addEventListener(AVATAR_EVENT, onAvatarChanged);
+    return () => window.removeEventListener(AVATAR_EVENT, onAvatarChanged);
+  }, [userEmail]);
+
   const initials = userName?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'IN';
 
   // En móvil el menú siempre va expandido — colapsar no tiene sentido en un drawer angosto.
@@ -204,8 +226,19 @@ function SidebarInstructor({ activeView, onViewChange, onLogout, userName, colla
         padding: isCollapsed ? '18px 0' : '18px 20px',
         display: 'flex', alignItems: 'center', justifyContent: isCollapsed ? 'center' : 'flex-start', gap: 11,
       }}>
-        <div title={isCollapsed ? userName : undefined} style={{ width: 32, height: 32, borderRadius: '50%', background: colors.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 600, color: colors.textMuted, border: `1px solid ${colors.border}`, flexShrink: 0 }}>
-          {initials}
+        <div
+          title={isCollapsed ? userName : undefined}
+          style={{
+            width: 32, height: 32, borderRadius: '50%', overflow: 'hidden',
+            background: colors.bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 11.5, fontWeight: 600, color: colors.textMuted, border: `1px solid ${colors.border}`, flexShrink: 0,
+          }}
+        >
+          {avatarUrl ? (
+            <img src={avatarUrl} alt={userName || 'Instructor'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            initials
+          )}
         </div>
         {!isCollapsed && (
           <div style={{ minWidth: 0 }}>
@@ -326,6 +359,7 @@ export default function InstructorDashboard({ user, onLogout }) {
           onViewChange={setActiveView}
           onLogout={onLogout}
           userName={user?.name || 'Instructor'}
+          userEmail={user?.email}
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed(v => !v)}
         />
@@ -352,6 +386,7 @@ export default function InstructorDashboard({ user, onLogout }) {
               onViewChange={setActiveView}
               onLogout={onLogout}
               userName={user?.name || 'Instructor'}
+              userEmail={user?.email}
               collapsed={false}
               onToggleCollapse={() => {}}
               mobile

@@ -332,11 +332,8 @@ export default function LoginScreen({ onLogin }) {
   const [registerConfirmPassword, setRegisterConfirmPassword] = useState('');
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const ACCOUNTS = {
-    'instructor@gmail.com':  { role: 'instructor', password: 'instructor', name: 'Instructor' },
-    'coordinador@gmail.com': { role: 'coordinator', password: 'coordinador', name: 'Coordinador' },
-  };
-
+  // Ya no hay cuentas hardcodeadas. Todo el login/registro pasa por el
+  // backend real (authService.js -> /usuario/login, /usuario/register).
 
   // Limpia el formulario de registro y vuelve a la pantalla de login
   const handleBackToLoginFromRegister = () => {
@@ -392,12 +389,7 @@ export default function LoginScreen({ onLogin }) {
       return;
     }
 
-    const account = ACCOUNTS[email.trim().toLowerCase()];
-    if (account && password.trim() === account.password) {
-      onLogin({ role: account.role, name: account.name, email: email.trim().toLowerCase() });
-    } else {
-      showToast('error', getFriendlyErrorMessage(err, 'login'));
-    }
+    showToast('error', getFriendlyErrorMessage(err, 'login'));
   } finally {
     setIsLoading(false);
   }
@@ -1025,11 +1017,7 @@ export default function LoginScreen({ onLogin }) {
               <section>
                 <div className="help-badge">1</div>
                 <h4>¿Cómo inicio sesión?</h4>
-                <p>Usa tu correo institucional y la contraseña asignada.</p>
-                <ul>
-                  <li>Instructor: correo <strong>instructor@gmail.com</strong>, contraseña <strong>instructor</strong></li>
-                  <li>Coordinador: correo <strong>coordinador@gmail.com</strong>, contraseña <strong>coordinador</strong></li>
-                </ul>
+                <p>Usa tu correo institucional y la contraseña asignada. Si aún no tienes cuenta, regístrate y espera a que el coordinador active tu rol.</p>
               </section>
               <section>
                 <div className="help-badge">2</div>
