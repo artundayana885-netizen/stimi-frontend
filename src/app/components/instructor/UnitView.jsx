@@ -591,6 +591,15 @@ export default function UnitView({ userName }) {
     },
   };
 
+  // ── % de cumplimiento real para el anillo de la cabecera: informes
+  // aprobados sobre el total esperado en el año (12, uno por mes). Si
+  // no hay informes todavía, queda en 0%.
+  const TOTAL_INFORMES_ESPERADOS = 12;
+  const approvedCount = dbReports.filter(r => normalizeStatus(r.status) === 'Aprobado').length;
+  const compliancePercent = TOTAL_INFORMES_ESPERADOS > 0
+    ? Math.round((approvedCount / TOTAL_INFORMES_ESPERADOS) * 100)
+    : 0;
+
   // ── Tarjetas de indicadores: valores en cero, listos para conectarse
   // a datos reales cuando existan informes.
   const scorecards = [
@@ -1099,7 +1108,7 @@ export default function UnitView({ userName }) {
           <p style={{ margin: 0, fontSize: 13.5, opacity: 0.72, maxWidth: 360 }}>Seguimiento de tus informes mensuales y desempeño frente a coordinación.</p>
         </div>
         <div style={{ position: isMobile ? 'relative' : 'relative', alignSelf: isMobile ? 'center' : 'auto', zIndex: 1, filter: 'drop-shadow(0 6px 18px rgba(143,224,92,0.4))' }}>
-          <ProgressRing value={0} size={isMobile ? 88 : 108} stroke={isMobile ? 8 : 9} track="rgba(255,255,255,0.18)" fill="#8FE05C" />
+          <ProgressRing value={compliancePercent} size={isMobile ? 88 : 108} stroke={isMobile ? 8 : 9} track="rgba(255,255,255,0.18)" fill="#8FE05C" />
         </div>
       </div>
 

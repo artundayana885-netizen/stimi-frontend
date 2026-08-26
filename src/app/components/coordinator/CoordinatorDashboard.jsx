@@ -270,7 +270,7 @@ export default function CoordinatorDashboard({ user, onLogout, pendingUsers, set
           onToggleDarkMode={toggleTheme}
         />
       );
-      case 'ai-assistant': return <AIAssistant />;
+      case 'ai-assistant': return <AIAssistant role="coordinador" userId={user?.id || user?.email} />;
       default: return <UnitView userName={user?.name || 'María Coordinadora'} onViewChange={setActiveView} />;
     }
   };

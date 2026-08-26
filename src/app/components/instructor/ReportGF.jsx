@@ -66,7 +66,7 @@ export default function ReportGF({ onBack }) {
         status: 'Pendiente',
         instructor: currentUserName,
         date: `${month}/${year}`,
-      });
+      }, mainFile);
 
       // Notificación para el coordinador
       const coordNotifs = JSON.parse(localStorage.getItem('sena_coord_notifications') || '[]');

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../../../ThemeContext';
 import { changePassword } from '../../../services/authService';
 
+
 // Colores institucionales (mismos que el resto de la app)
 const GREEN = '#39A900';
 const GREEN_DARK = '#1F6B0A';
@@ -88,12 +89,24 @@ const Icon = {
       <circle cx="12" cy="12" r="10" /><path d="M12 8v4" /><path d="M12 16h.01" />
     </svg>
   ),
+  Trash: (p) => (
+    <svg viewBox="0 0 24 24" width={p?.size || 12} height={p?.size || 12} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" />
+    </svg>
+  ),
 };
+
+// Clave de localStorage para la foto de perfil y nombre del evento que
+// avisa al resto de la app (p. ej. el menú lateral) cuando la foto cambia.
+const AVATAR_EVENT = 'sena-avatar-changed';
+const getAvatarKey = (email) => `sena_avatar_${email || 'default'}`;
 
 export default function SettingsView({ userName }) {
   const { theme, toggleTheme, colors } = useTheme();
   const savedUser = JSON.parse(localStorage.getItem('sena_user') || '{}');
   const userEmail = savedUser.email || 'instructor@sena.edu.co';
+  const avatarKey = getAvatarKey(userEmail);
+
   const [notifEmail, setNotifEmail]       = useState(true);
   const [notifReminder, setNotifReminder] = useState(true);
   const [notifUpdates, setNotifUpdates]   = useState(false);
@@ -101,7 +114,9 @@ export default function SettingsView({ userName }) {
 
   // ── Nuevas preferencias ──────────────────────────────────────────────
   const [density, setDensity]     = useState('comfortable'); // 'comfortable' | 'compact'
-  const [avatarUrl, setAvatarUrl] = useState(null);
+  // La foto de perfil se carga desde localStorage al montar, así que
+  // persiste entre recargas y sesiones hasta que el usuario la borre.
+  const [avatarUrl, setAvatarUrl] = useState(() => localStorage.getItem(avatarKey) || null);
   const fileInputRef = useRef(null);
 
   // Contraseñas
@@ -147,12 +162,38 @@ export default function SettingsView({ userName }) {
 
   const showToast = (msg, color = GREEN) => { setToast({ msg, color }); setTimeout(() => setToast(null), 3000); };
 
+  // Si la foto se cambia desde otra pestaña/componente (poco probable, pero
+  // por si el menú lateral también permite subirla), esta vista se mantiene sincronizada.
+  useEffect(() => {
+    const onAvatarChanged = (e) => {
+      if (e.detail?.email === userEmail) setAvatarUrl(e.detail.avatarUrl);
+    };
+    window.addEventListener(AVATAR_EVENT, onAvatarChanged);
+    return () => window.removeEventListener(AVATAR_EVENT, onAvatarChanged);
+  }, [userEmail]);
+
   const handleAvatarChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => { setAvatarUrl(reader.result); showToast('Foto de perfil actualizada'); };
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      setAvatarUrl(dataUrl);
+      localStorage.setItem(avatarKey, dataUrl);
+      // Avisa al resto de la app (p. ej. el menú lateral) que hay una foto nueva.
+      window.dispatchEvent(new CustomEvent(AVATAR_EVENT, { detail: { email: userEmail, avatarUrl: dataUrl } }));
+      showToast('Foto de perfil actualizada');
+    };
     reader.readAsDataURL(file);
+    // Permite volver a seleccionar el mismo archivo si se borra y se vuelve a subir.
+    e.target.value = '';
+  };
+
+  const handleRemoveAvatar = () => {
+    setAvatarUrl(null);
+    localStorage.removeItem(avatarKey);
+    window.dispatchEvent(new CustomEvent(AVATAR_EVENT, { detail: { email: userEmail, avatarUrl: null } }));
+    showToast('Foto de perfil eliminada', ORANGE);
   };
 
   const Toggle = ({ value, onChange }) => (
@@ -295,8 +336,6 @@ export default function SettingsView({ userName }) {
               })}
             </div>
 
-
-
           </div>
 
           {/* Información Personal */}
@@ -310,10 +349,14 @@ export default function SettingsView({ userName }) {
             <div className="sv-avatar-row">
               <div style={{ position: 'relative', width: 64, height: 64, flexShrink: 0 }}>
                 {avatarUrl ? (
-                  <img src={avatarUrl} alt="Foto de perfil" style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', border: `2px solid ${colors.border}` }} />
+                  <img
+                    src={avatarUrl}
+                    alt="Foto de perfil"
+                    style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover' }}
+                  />
                 ) : (
-                  <div style={{ width: 64, height: 64, borderRadius: '50%', background: `linear-gradient(135deg, ${GREEN}, ${GREEN_DARK})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 700, color: '#fff' }}>
-                    {userName?.charAt(0)?.toUpperCase() || '?'}
+                  <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', fontWeight: 700, fontSize: 22 }}>
+                    {(userName || 'I').charAt(0).toUpperCase()}
                   </div>
                 )}
                 <button
@@ -332,6 +375,18 @@ export default function SettingsView({ userName }) {
               <div>
                 <div style={{ fontSize: 13.5, fontWeight: 600 }}>Foto de perfil</div>
                 <div style={{ fontSize: 12, color: colors.textFaint, marginTop: 2 }}>JPG o PNG, recomendado 400×400px</div>
+                {avatarUrl && (
+                  <button
+                    onClick={handleRemoveAvatar}
+                    style={{
+                      marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 5,
+                      background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                      fontSize: 12, fontWeight: 600, color: '#ef4444',
+                    }}
+                  >
+                    <Icon.Trash /> Eliminar foto
+                  </button>
+                )}
               </div>
             </div>
 

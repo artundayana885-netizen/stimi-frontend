@@ -301,7 +301,7 @@ export default function InstructorDashboard({ user, onLogout }) {
       case 'new-report':    return <NewReport />;
       case 'notifications': return <Notifications />;
       case 'compliance':    return <Compliance />;
-      case 'ai-assistant':  return <AIAssistant />;
+      case 'ai-assistant':  return <AIAssistant role="instructor" userId={user?.id || user?.email} />;
       case 'settings':      return <SettingsView userName={user?.name} />;
       default:              return <UnitView userName={user?.name} />;
     }

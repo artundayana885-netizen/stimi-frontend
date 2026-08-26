@@ -250,11 +250,19 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
     if (!assignRole || !assignModal) return;
     const roleLabel = assignRole === 'instructor' ? 'Instructor' : 'Coordinador';
     try {
-      await changeUserRole(assignModal.id, assignRole);
-      showToast(`Rol de ${roleLabel} asignado a ${assignModal.name}.`);
+      const result = await changeUserRole(assignModal.id, assignRole);
+      // Igual que en "Olvidé mi contraseña": si el correo de notificación
+      // no logró enviarse, se lo hacemos saber al coordinador en pantalla
+      // en vez de dejarlo pasar en silencio (la acción ya se aplicó igual).
+      showToast(
+        result?.emailSent === false
+          ? `Rol de ${roleLabel} asignado a ${assignModal.name}, pero no se pudo enviar el correo de notificación.`
+          : `Rol de ${roleLabel} asignado a ${assignModal.name}.`,
+        result?.emailSent === false ? '#eab308' : '#2E8B00'
+      );
       addHistoryEntry({
         action: 'Rol asignado',
-        detail: `Se asignó el rol de ${roleLabel} a ${assignModal.name} (${assignModal.email})`,
+        detail: `Se asignó el rol de ${roleLabel} a ${assignModal.name} (${assignModal.email})${result?.emailSent === false ? ' — el correo de notificación no se pudo enviar' : ''}`,
         by: assignModal.name,
         type: 'Usuarios',
         kind: 'approved',
@@ -277,11 +285,16 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
   const handleRejectPending = async () => {
     if (!rejectModal) return;
     try {
-      await deleteUser(rejectModal.id);
-      showToast(`Registro de ${rejectModal.name} rechazado`, '#ef4444');
+      const result = await deleteUser(rejectModal.id);
+      showToast(
+        result?.emailSent === false
+          ? `Registro de ${rejectModal.name} rechazado, pero no se pudo enviar el correo de notificación.`
+          : `Registro de ${rejectModal.name} rechazado`,
+        '#ef4444'
+      );
       addHistoryEntry({
         action: 'Registro rechazado',
-        detail: `Se rechazó la solicitud de registro de ${rejectModal.name} (${rejectModal.email})`,
+        detail: `Se rechazó la solicitud de registro de ${rejectModal.name} (${rejectModal.email})${result?.emailSent === false ? ' — el correo de notificación no se pudo enviar' : ''}`,
         by: rejectModal.name,
         type: 'Usuarios',
         kind: 'rejected',
@@ -303,11 +316,16 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
   const handleChangeRole = async () => {
     const previousRole = roleModal.role;
     try {
-      await changeUserRole(roleModal.id, selectedRole.toLowerCase());
-      showToast(`Rol de ${roleModal.name} cambiado a ${selectedRole}`);
+      const result = await changeUserRole(roleModal.id, selectedRole.toLowerCase());
+      showToast(
+        result?.emailSent === false
+          ? `Rol de ${roleModal.name} cambiado a ${selectedRole}, pero no se pudo enviar el correo de notificación.`
+          : `Rol de ${roleModal.name} cambiado a ${selectedRole}`,
+        result?.emailSent === false ? '#eab308' : '#2E8B00'
+      );
       addHistoryEntry({
         action: 'Rol cambiado',
-        detail: `El rol de ${roleModal.name} cambió de ${previousRole} a ${selectedRole}`,
+        detail: `El rol de ${roleModal.name} cambió de ${previousRole} a ${selectedRole}${result?.emailSent === false ? ' — el correo de notificación no se pudo enviar' : ''}`,
         by: roleModal.name,
         type: 'Usuarios',
         kind: 'system',
@@ -329,16 +347,17 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
   const handleToggleStatus = async () => {
     const wasActive = statusModal.active !== false;
     try {
-      await toggleUserStatus(statusModal.id);
+      const result = await toggleUserStatus(statusModal.id);
+      const baseMsg = wasActive ? `${statusModal.name} fue desactivado` : `${statusModal.name} fue activado de nuevo`;
       showToast(
-        wasActive ? `${statusModal.name} fue desactivado` : `${statusModal.name} fue activado de nuevo`,
-        wasActive ? '#ef4444' : '#2E8B00'
+        result?.emailSent === false ? `${baseMsg}, pero no se pudo enviar el correo de notificación.` : baseMsg,
+        result?.emailSent === false ? '#eab308' : (wasActive ? '#ef4444' : '#2E8B00')
       );
       addHistoryEntry({
         action: wasActive ? 'Usuario desactivado' : 'Usuario activado',
-        detail: wasActive
+        detail: (wasActive
           ? `${statusModal.name} (${statusModal.email}) fue desactivado`
-          : `${statusModal.name} (${statusModal.email}) fue reactivado`,
+          : `${statusModal.name} (${statusModal.email}) fue reactivado`) + (result?.emailSent === false ? ' — el correo de notificación no se pudo enviar' : ''),
         by: statusModal.name,
         type: 'Usuarios',
         kind: wasActive ? 'rejected' : 'approved',
@@ -359,11 +378,16 @@ export default function UserManagement({ pendingUsers = [], setPendingUsers, onA
 
   const handleDelete = async () => {
     try {
-      await deleteUser(deleteModal.id);
-      showToast(`${deleteModal.name} eliminado del sistema`, '#ef4444');
+      const result = await deleteUser(deleteModal.id);
+      showToast(
+        result?.emailSent === false
+          ? `${deleteModal.name} eliminado del sistema, pero no se pudo enviar el correo de notificación.`
+          : `${deleteModal.name} eliminado del sistema`,
+        '#ef4444'
+      );
       addHistoryEntry({
         action: 'Usuario eliminado',
-        detail: `${deleteModal.name} (${deleteModal.email}) fue eliminado del sistema`,
+        detail: `${deleteModal.name} (${deleteModal.email}) fue eliminado del sistema${result?.emailSent === false ? ' — el correo de notificación no se pudo enviar' : ''}`,
         by: deleteModal.name,
         type: 'Usuarios',
         kind: 'rejected',

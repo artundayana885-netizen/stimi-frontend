@@ -5,89 +5,131 @@ import { enviarMensajeZoe } from '../../../services/zoeService';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-// Colores institucionales — los mismos tonos que ya usa el resto del
-// panel (sidebar del Coordinador): verdes forestales profundos y naranja
-// quemado como acento, en vez de un verde saturado tipo "marca genérica".
+// Colores institucionales SENA — toda la paleta se mantiene dentro de la
+// familia de verdes de la marca (verde SENA oficial #39A900), en vez de
+// mezclar con un color ajeno a la identidad institucional. Coordinación
+// usa el verde bosque profundo del sidebar; Formación/Instructor usa el
+// verde SENA vivo como acento, para que ambos paneles se distingan a
+// simple vista sin salirse de la marca.
 const GREEN_DARK = '#14532d';
 const GREEN = '#166534';
 const GREEN_MID = '#15803d';
 const GREEN_SOFT = '#16a34a';
-const ORANGE = '#c2410c';
-const ORANGE_MID = '#ea580c';
-const ORANGE_SOFT = '#f97316';
+const SENA_DARK = '#1F6600';
+const SENA = '#2E8B00';
+const SENA_MID = '#39A900';
+const SENA_SOFT = '#84CC16';
 
 // Extensiones aceptadas para evidencia GC
 const ACCEPTED_EXT = '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png';
 const MAX_SIZE_MB = 20;
 
-// Sugerencias rápidas para el estado vacío del chat
-const QUICK_PROMPTS = [
-  { label: 'Subir una evidencia', action: 'upload' },
-  { label: '¿Qué formatos acepta?', action: 'text', value: '¿Qué formatos de archivo acepta el sistema y cuál es el tamaño máximo?' },
-  { label: '¿Cómo va mi cumplimiento?', action: 'text', value: '¿Cómo va mi cumplimiento de evidencias GC este mes?' },
-];
+/* --------------------- Configuración por rol --------------------- */
+// El mismo componente sirve para el panel del Coordinador y el del
+// Instructor. Lo que cambia entre ellos es el copy, el énfasis de color
+// y a qué webhook / clave de historial le habla cada uno — así ambos se
+// sienten como una herramienta hecha a la medida de cada rol, no como
+// la misma pantalla repetida dos veces.
+const ROLE_CONFIG = {
+  coordinador: {
+    accent: 'green',
+    eyebrow: 'ASISTENTE · COORDINACIÓN',
+    title: 'Asistente IA',
+    subtitle: 'Pregúntame por el cumplimiento de tu equipo, revisa evidencias o pídeme un resumen general.',
+    emptyTitle: '¿En qué te puedo ayudar hoy?',
+    emptySubtitle: 'Consulta el estado de tu equipo o adjunta un archivo para enviarlo a revisión.',
+    quickPrompts: [
+      { label: 'Cumplimiento del equipo', action: 'text', value: '¿Cómo va el cumplimiento de evidencias de mi equipo este mes?' },
+      { label: 'Pendientes por revisar', action: 'text', value: '¿Qué instructores tienen evidencias GC o GF pendientes de revisión?' },
+      { label: 'Subir una evidencia', action: 'upload' },
+    ],
+    envSuffix: '_COORDINADOR',
+  },
+  instructor: {
+    accent: 'sena',
+    eyebrow: 'ASISTENTE · FORMACIÓN',
+    title: 'Asistente IA',
+    subtitle: 'Pregúntame lo que necesites o adjunta tu evidencia GC/GF y la envío a revisión por ti.',
+    emptyTitle: '¿En qué te puedo ayudar hoy?',
+    emptySubtitle: 'Escribe tu pregunta o arrastra un archivo aquí para enviarlo a revisión.',
+    quickPrompts: [
+      { label: 'Subir una evidencia', action: 'upload' },
+      { label: '¿Qué formatos acepta?', action: 'text', value: '¿Qué formatos de archivo acepta el sistema y cuál es el tamaño máximo?' },
+      { label: '¿Cómo va mi cumplimiento?', action: 'text', value: '¿Cómo va mi cumplimiento de evidencias GC este mes?' },
+    ],
+    envSuffix: '_INSTRUCTOR',
+  },
+};
 
-// Paleta clara/oscura, alineada con los tonos activos del sidebar
-// (rgba(21,128,61,..) / #F0FDF4 en claro, #4ADE80 en oscuro) para que todo
-// el panel se sienta como un mismo sistema, no como piezas sueltas.
+// Paleta clara/oscura, alineada con los tonos activos del sidebar.
+// Cada rol reordena qué tono de verde SENA es el protagonista: verde
+// bosque para Coordinación, verde SENA vivo para Formación/Instructor.
+// Así comparten el mismo sistema visual e institucional, pero se
+// distinguen a simple vista.
 const PALETTES = {
   light: {
-    headerBg: '#F0FDF4',
-    headerBorder: '#BBF7D0',
-    headerText: GREEN_DARK,
-    headerSubText: 'rgba(20,83,45,0.72)',
-    headerShadow: '0 6px 18px -14px rgba(20,83,45,0.3)',
-    topBar: `linear-gradient(90deg, ${GREEN_MID}, ${ORANGE_MID})`,
-    eyebrowBg: 'rgba(21,128,61,0.1)',
-    eyebrowBorder: 'rgba(21,128,61,0.22)',
-    eyebrowIcon: GREEN_MID,
-    liveDot: GREEN_SOFT,
-    userBubbleBg: `linear-gradient(135deg, ${GREEN_MID} 0%, ${GREEN_DARK} 100%)`,
-    userBubbleText: '#FFFFFF',
-    assistantAvatarBg: '#F0FDF4',
-    assistantAvatarIcon: GREEN_MID,
-    assistantAvatarBorder: '#BBF7D0',
-    sendBg: `linear-gradient(135deg, ${GREEN_MID} 0%, ${GREEN_DARK} 100%)`,
-    sendIcon: '#FFFFFF',
-    quickHoverBg: '#F0FDF4',
-    quickHoverBorder: GREEN_MID,
-    quickHoverText: GREEN_DARK,
-    dragOverlayBg: 'rgba(240,253,244,0.94)',
-    dragBorder: GREEN_MID,
-    dragIconBg: `linear-gradient(135deg, ${GREEN_MID}, ${GREEN_DARK})`,
-    dragIconColor: '#FFFFFF',
-    composerShadow: '0 8px 20px -16px rgba(20,83,45,0.25)',
-    watermark: 'rgba(21,128,61,0.06)',
-    stampRing: GREEN_MID,
+    green: {
+      headerBg: '#F0FDF4', headerBorder: '#BBF7D0', headerText: GREEN_DARK,
+      headerSubText: 'rgba(20,83,45,0.72)', headerShadow: '0 6px 18px -14px rgba(20,83,45,0.3)',
+      topBar: `linear-gradient(90deg, ${GREEN_MID}, ${SENA_MID})`,
+      eyebrowBg: 'rgba(21,128,61,0.1)', eyebrowBorder: 'rgba(21,128,61,0.22)', eyebrowIcon: GREEN_MID,
+      liveDot: GREEN_SOFT,
+      userBubbleBg: `linear-gradient(135deg, ${GREEN_MID} 0%, ${GREEN_DARK} 100%)`, userBubbleText: '#FFFFFF',
+      assistantAvatarBg: '#F0FDF4', assistantAvatarIcon: GREEN_MID, assistantAvatarBorder: '#BBF7D0',
+      sendBg: `linear-gradient(135deg, ${GREEN_MID} 0%, ${GREEN_DARK} 100%)`, sendIcon: '#FFFFFF',
+      quickHoverBg: '#F0FDF4', quickHoverBorder: GREEN_MID, quickHoverText: GREEN_DARK,
+      dragOverlayBg: 'rgba(240,253,244,0.94)', dragBorder: GREEN_MID,
+      dragIconBg: `linear-gradient(135deg, ${GREEN_MID}, ${GREEN_DARK})`, dragIconColor: '#FFFFFF',
+      composerShadow: '0 8px 20px -16px rgba(20,83,45,0.25)', watermark: 'rgba(21,128,61,0.06)', stampRing: GREEN_MID,
+      codeBg: 'rgba(21,128,61,0.08)', linkColor: GREEN_MID,
+    },
+    sena: {
+      headerBg: '#F0FDF0', headerBorder: '#BBEE9F', headerText: SENA_DARK,
+      headerSubText: 'rgba(31,102,0,0.72)', headerShadow: '0 6px 18px -14px rgba(31,102,0,0.3)',
+      topBar: `linear-gradient(90deg, ${SENA_MID}, ${GREEN_MID})`,
+      eyebrowBg: 'rgba(57,169,0,0.1)', eyebrowBorder: 'rgba(57,169,0,0.22)', eyebrowIcon: SENA_MID,
+      liveDot: SENA_SOFT,
+      userBubbleBg: `linear-gradient(135deg, ${SENA_MID} 0%, ${SENA_DARK} 100%)`, userBubbleText: '#FFFFFF',
+      assistantAvatarBg: '#F0FDF0', assistantAvatarIcon: SENA_MID, assistantAvatarBorder: '#BBEE9F',
+      sendBg: `linear-gradient(135deg, ${SENA_MID} 0%, ${SENA_DARK} 100%)`, sendIcon: '#FFFFFF',
+      quickHoverBg: '#F0FDF0', quickHoverBorder: SENA_MID, quickHoverText: SENA_DARK,
+      dragOverlayBg: 'rgba(240,253,240,0.94)', dragBorder: SENA_MID,
+      dragIconBg: `linear-gradient(135deg, ${SENA_MID}, ${SENA_DARK})`, dragIconColor: '#FFFFFF',
+      composerShadow: '0 8px 20px -16px rgba(31,102,0,0.25)', watermark: 'rgba(57,169,0,0.06)', stampRing: SENA_MID,
+      codeBg: 'rgba(57,169,0,0.08)', linkColor: SENA,
+    },
   },
   dark: {
-    headerBg: 'rgba(21,128,61,0.16)',
-    headerBorder: 'rgba(74,222,128,0.25)',
-    headerText: '#4ADE80',
-    headerSubText: 'rgba(226,255,234,0.72)',
-    headerShadow: '0 10px 26px -16px rgba(0,0,0,0.5)',
-    topBar: `linear-gradient(90deg, ${GREEN_SOFT}, ${ORANGE_SOFT})`,
-    eyebrowBg: 'rgba(74,222,128,0.12)',
-    eyebrowBorder: 'rgba(74,222,128,0.3)',
-    eyebrowIcon: '#4ADE80',
-    liveDot: '#4ADE80',
-    userBubbleBg: `linear-gradient(135deg, ${GREEN_SOFT} 0%, ${GREEN_MID} 100%)`,
-    userBubbleText: '#FFFFFF',
-    assistantAvatarBg: 'rgba(21,128,61,0.22)',
-    assistantAvatarIcon: '#4ADE80',
-    assistantAvatarBorder: 'rgba(74,222,128,0.35)',
-    sendBg: `linear-gradient(135deg, ${GREEN_SOFT} 0%, ${GREEN_MID} 100%)`,
-    sendIcon: '#FFFFFF',
-    quickHoverBg: 'rgba(21,128,61,0.18)',
-    quickHoverBorder: '#4ADE80',
-    quickHoverText: '#4ADE80',
-    dragOverlayBg: 'rgba(6,20,13,0.75)',
-    dragBorder: '#4ADE80',
-    dragIconBg: `linear-gradient(135deg, ${GREEN_SOFT}, ${GREEN_MID})`,
-    dragIconColor: '#FFFFFF',
-    composerShadow: '0 10px 26px -16px rgba(0,0,0,0.5)',
-    watermark: 'rgba(74,222,128,0.07)',
-    stampRing: '#4ADE80',
+    green: {
+      headerBg: 'rgba(21,128,61,0.16)', headerBorder: 'rgba(74,222,128,0.25)', headerText: '#4ADE80',
+      headerSubText: 'rgba(226,255,234,0.72)', headerShadow: '0 10px 26px -16px rgba(0,0,0,0.5)',
+      topBar: `linear-gradient(90deg, ${GREEN_SOFT}, ${SENA_SOFT})`,
+      eyebrowBg: 'rgba(74,222,128,0.12)', eyebrowBorder: 'rgba(74,222,128,0.3)', eyebrowIcon: '#4ADE80',
+      liveDot: '#4ADE80',
+      userBubbleBg: `linear-gradient(135deg, ${GREEN_SOFT} 0%, ${GREEN_MID} 100%)`, userBubbleText: '#FFFFFF',
+      assistantAvatarBg: 'rgba(21,128,61,0.22)', assistantAvatarIcon: '#4ADE80', assistantAvatarBorder: 'rgba(74,222,128,0.35)',
+      sendBg: `linear-gradient(135deg, ${GREEN_SOFT} 0%, ${GREEN_MID} 100%)`, sendIcon: '#FFFFFF',
+      quickHoverBg: 'rgba(21,128,61,0.18)', quickHoverBorder: '#4ADE80', quickHoverText: '#4ADE80',
+      dragOverlayBg: 'rgba(6,20,13,0.75)', dragBorder: '#4ADE80',
+      dragIconBg: `linear-gradient(135deg, ${GREEN_SOFT}, ${GREEN_MID})`, dragIconColor: '#FFFFFF',
+      composerShadow: '0 10px 26px -16px rgba(0,0,0,0.5)', watermark: 'rgba(74,222,128,0.07)', stampRing: '#4ADE80',
+      codeBg: 'rgba(74,222,128,0.12)', linkColor: '#4ADE80',
+    },
+    sena: {
+      headerBg: 'rgba(57,169,0,0.16)', headerBorder: 'rgba(163,230,53,0.25)', headerText: '#A3E635',
+      headerSubText: 'rgba(236,255,226,0.72)', headerShadow: '0 10px 26px -16px rgba(0,0,0,0.5)',
+      topBar: `linear-gradient(90deg, ${SENA_SOFT}, ${GREEN_SOFT})`,
+      eyebrowBg: 'rgba(163,230,53,0.12)', eyebrowBorder: 'rgba(163,230,53,0.3)', eyebrowIcon: '#A3E635',
+      liveDot: '#A3E635',
+      userBubbleBg: `linear-gradient(135deg, ${SENA_SOFT} 0%, ${SENA_MID} 100%)`, userBubbleText: '#FFFFFF',
+      assistantAvatarBg: 'rgba(57,169,0,0.22)', assistantAvatarIcon: '#A3E635', assistantAvatarBorder: 'rgba(163,230,53,0.35)',
+      sendBg: `linear-gradient(135deg, ${SENA_SOFT} 0%, ${SENA_MID} 100%)`, sendIcon: '#FFFFFF',
+      quickHoverBg: 'rgba(57,169,0,0.18)', quickHoverBorder: '#A3E635', quickHoverText: '#A3E635',
+      dragOverlayBg: 'rgba(9,20,4,0.75)', dragBorder: '#A3E635',
+      dragIconBg: `linear-gradient(135deg, ${SENA_SOFT}, ${SENA_MID})`, dragIconColor: '#FFFFFF',
+      composerShadow: '0 10px 26px -16px rgba(0,0,0,0.5)', watermark: 'rgba(163,230,53,0.07)', stampRing: '#A3E635',
+      codeBg: 'rgba(163,230,53,0.12)', linkColor: '#A3E635',
+    },
   },
 };
 
@@ -195,13 +237,39 @@ function nextId() {
   return `m-${Date.now()}-${idCounter}`;
 }
 
-// Historial de conversaciones — se guarda en localStorage del navegador,
-// así que persiste entre sesiones sin necesitar backend adicional.
-const HISTORY_KEY = 'sena-ai-assistant-history';
+// El bot (Zoe/n8n) responde con formato tipo WhatsApp: *negrita*, emojis
+// numerados, saltos de línea sueltos. Esto lo convierte a Markdown real
+// para que ReactMarkdown lo pinte como texto organizado (negritas, listas,
+// párrafos) en vez de un bloque plano lleno de asteriscos.
+function formatBotText(raw) {
+  if (!raw) return '';
+  let t = String(raw).replace(/\r\n/g, '\n');
 
-function loadConversations() {
+  // *negrita* (WhatsApp) -> **negrita** (Markdown), sin tocar **ya en negrita**
+  t = t.replace(/(^|[^*])\*(?!\*)([^*\n]+?)\*(?!\*)/g, '$1**$2**');
+
+  // Líneas que empiezan con "* " o "- " se preservan como viñetas de lista
+  // Saltos de línea sencillos -> salto "duro" de Markdown (dos espacios + \n)
+  t = t
+    .split('\n')
+    .map((line) => line.replace(/\s+$/, ''))
+    .join('  \n');
+
+  return t.trim();
+}
+
+// Historial de conversaciones — se guarda en localStorage del navegador,
+// separado por rol (coordinador / instructor) y por usuario, así el
+// historial de un panel nunca se mezcla ni se sobrescribe con el del otro.
+const HISTORY_PREFIX = 'sena-ai-assistant-history';
+
+function historyKey(role, userId) {
+  return `${HISTORY_PREFIX}:${role || 'default'}:${userId || 'default'}`;
+}
+
+function loadConversations(key) {
   try {
-    const raw = localStorage.getItem(HISTORY_KEY);
+    const raw = localStorage.getItem(key);
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed : [];
   } catch {
@@ -209,9 +277,9 @@ function loadConversations() {
   }
 }
 
-function saveConversations(list) {
+function saveConversations(key, list) {
   try {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+    localStorage.setItem(key, JSON.stringify(list));
   } catch {
     // Si el navegador bloquea localStorage (modo incógnito estricto, etc.)
     // simplemente no persistimos; el chat sigue funcionando en memoria.
@@ -240,11 +308,6 @@ function formatRelativeDate(ts) {
 }
 
 /* ---------------------- Firma visual: emblema y sello ---------------------- */
-// El encabezado lleva un emblema abstracto (una hoja/llama estilizada, en
-// alusión a la formación SENA) como marca de agua discreta detrás del
-// título — profundidad sin ruido. El momento de mayor personalidad se
-// reserva para el sello circular que confirma una evidencia revisada,
-// como un sello oficial de trámite, coherente con el propósito del panel.
 
 function EmblemWatermark({ color }) {
   return (
@@ -274,12 +337,61 @@ function ApprovalStamp({ palette }) {
   );
 }
 
+/* ------------------- Render Markdown para mensajes del bot ------------------- */
+// Convierte la respuesta del asistente en bloques bien organizados
+// (títulos en negrita, listas, párrafos) en vez de un párrafo corrido
+// lleno de asteriscos y emojis pegados.
+function BotMarkdown({ text, colors, palette }) {
+  const components = useMemo(() => ({
+    p: ({ children }) => <p style={{ margin: '0 0 8px', lineHeight: 1.6 }}>{children}</p>,
+    strong: ({ children }) => <strong style={{ fontWeight: 800, color: colors.text }}>{children}</strong>,
+    em: ({ children }) => <em style={{ color: colors.textSecondary }}>{children}</em>,
+    ul: ({ children }) => <ul style={{ margin: '4px 0 10px', paddingLeft: 18 }}>{children}</ul>,
+    ol: ({ children }) => <ol style={{ margin: '4px 0 10px', paddingLeft: 18 }}>{children}</ol>,
+    li: ({ children }) => <li style={{ marginBottom: 4, lineHeight: 1.55 }}>{children}</li>,
+    a: ({ children, href }) => (
+      <a href={href} target="_blank" rel="noreferrer" style={{ color: palette.linkColor, fontWeight: 700, textDecoration: 'underline' }}>
+        {children}
+      </a>
+    ),
+    code: ({ children }) => (
+      <code style={{ background: palette.codeBg, padding: '1px 5px', borderRadius: 5, fontSize: '0.92em' }}>{children}</code>
+    ),
+    hr: () => <hr style={{ border: 'none', borderTop: `1px solid ${colors.border}`, margin: '10px 0' }} />,
+    table: ({ children }) => (
+      <div style={{ overflowX: 'auto', margin: '6px 0 10px' }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.95em' }}>{children}</table>
+      </div>
+    ),
+    th: ({ children }) => <th style={{ textAlign: 'left', padding: '5px 8px', borderBottom: `2px solid ${colors.border}`, fontWeight: 800 }}>{children}</th>,
+    td: ({ children }) => <td style={{ padding: '5px 8px', borderBottom: `1px solid ${colors.border}` }}>{children}</td>,
+  }), [colors, palette]);
+
+  return (
+    <div style={{ fontSize: 13.5 }}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        {formatBotText(text)}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
 /* ---------------------------- Componente ---------------------------- */
 
-export default function AIAssistant() {
+export default function AIAssistant({ role = 'coordinador', userId = 'default' }) {
   const { colors, theme } = useTheme();
   const isDark = theme === 'dark';
-  const p = useMemo(() => (isDark ? PALETTES.dark : PALETTES.light), [isDark]);
+  const cfg = ROLE_CONFIG[role] || ROLE_CONFIG.coordinador;
+  const p = useMemo(() => (isDark ? PALETTES.dark[cfg.accent] : PALETTES.light[cfg.accent]), [isDark, cfg.accent]);
+  const STORAGE_KEY = useMemo(() => historyKey(role, userId), [role, userId]);
+
+  // Selecciona el webhook específico del rol (VITE_..._COORDINADOR /
+  // VITE_..._INSTRUCTOR) y cae de vuelta al genérico si no está definido,
+  // para no romper despliegues que aún no tengan variables separadas.
+  const envUrl = useCallback((base) => {
+    const specific = import.meta.env[`${base}${cfg.envSuffix}`];
+    return specific || import.meta.env[base];
+  }, [cfg.envSuffix]);
 
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
@@ -295,10 +407,10 @@ export default function AIAssistant() {
   const textareaRef = useRef(null);
   const scrollRef = useRef(null);
 
-  // Al montar: carga el historial guardado y retoma la conversación más
-  // reciente (o abre una nueva si no hay ninguna todavía).
+  // Al montar (o al cambiar de rol/usuario): carga el historial de ESTE
+  // panel y retoma la conversación más reciente, o abre una nueva.
   useEffect(() => {
-    const loaded = loadConversations();
+    const loaded = loadConversations(STORAGE_KEY);
     setConversations(loaded);
     if (loaded.length > 0) {
       const mostRecent = [...loaded].sort((a, b) => b.updatedAt - a.updatedAt)[0];
@@ -306,8 +418,9 @@ export default function AIAssistant() {
       setMessages(mostRecent.messages);
     } else {
       setActiveId(nextId());
+      setMessages([]);
     }
-  }, []);
+  }, [STORAGE_KEY]);
 
   // Autoguarda la conversación activa cada vez que cambian sus mensajes.
   useEffect(() => {
@@ -316,10 +429,10 @@ export default function AIAssistant() {
       const idx = prev.findIndex((c) => c.id === activeId);
       const updated = { id: activeId, title: deriveTitle(messages), messages, updatedAt: Date.now() };
       const next = idx >= 0 ? prev.map((c) => (c.id === activeId ? updated : c)) : [updated, ...prev];
-      saveConversations(next);
+      saveConversations(STORAGE_KEY, next);
       return next;
     });
-  }, [messages, activeId]);
+  }, [messages, activeId, STORAGE_KEY]);
 
   const startNewConversation = useCallback(() => {
     setActiveId(nextId());
@@ -339,11 +452,11 @@ export default function AIAssistant() {
     e.stopPropagation();
     setConversations((prev) => {
       const next = prev.filter((c) => c.id !== id);
-      saveConversations(next);
+      saveConversations(STORAGE_KEY, next);
       return next;
     });
     if (id === activeId) startNewConversation();
-  }, [activeId, startNewConversation]);
+  }, [activeId, startNewConversation, STORAGE_KEY]);
 
   // Autoscroll al último mensaje
   useEffect(() => {
@@ -424,38 +537,40 @@ export default function AIAssistant() {
           { id: assistantId, role: 'assistant', type: 'review', status: 'uploading', timestamp: Date.now() },
         ]);
         try {
-  const nombreArchivo = fileToSend.name.toUpperCase();
+          const nombreArchivo = fileToSend.name.toUpperCase();
 
-  let webhookUrl;
-  if (nombreArchivo.startsWith('GC_') || nombreArchivo.includes('_GC_')) {
-    webhookUrl = import.meta.env.VITE_ZOE_REVISAR_GC_URL;
-  } else if (nombreArchivo.startsWith('GF_') || nombreArchivo.includes('_GF_')) {
-    webhookUrl = import.meta.env.VITE_ZOE_REVISAR_GF_URL;
-  } else {
-    throw new Error('El archivo debe ser un GC o un GF, con el formato GC_[cédula]_[plantilla]_[mes]_[año].pdf o GF_[cédula]_[plantilla]_[mes]_[año].pdf');
-  }
+          let webhookUrl;
+          if (nombreArchivo.startsWith('GC_') || nombreArchivo.includes('_GC_')) {
+            webhookUrl = envUrl('VITE_ZOE_REVISAR_GC_URL');
+          } else if (nombreArchivo.startsWith('GF_') || nombreArchivo.includes('_GF_')) {
+            webhookUrl = envUrl('VITE_ZOE_REVISAR_GF_URL');
+          } else {
+            throw new Error('El archivo debe ser un GC o un GF, con el formato GC_[cédula]_[plantilla]_[mes]_[año].pdf o GF_[cédula]_[plantilla]_[mes]_[año].pdf');
+          }
 
-  const formData = new FormData();
-  formData.append('identificador', activeId);
-  formData.append('file', fileToSend);
+          const formData = new FormData();
+          formData.append('identificador', activeId);
+          formData.append('rol', role);
+          formData.append('file', fileToSend);
 
-  const res = await fetch(webhookUrl, {
-    method: 'POST',
-    body: formData,
-  });
-  const data = await res.json();
+          const res = await fetch(webhookUrl, {
+            method: 'POST',
+            body: formData,
+          });
+          const data = await res.json();
 
-  if (!data.valido) {
-    updateMessage(assistantId, { status: 'error', error: data.mensaje || 'El documento no pudo ser validado.' });
-  } else {
-    updateMessage(assistantId, { status: 'success', result: { mensaje: data.mensaje } });
-  }
-} catch (err) {
-  updateMessage(assistantId, { status: 'error', error: err.message || 'Ocurrió un error al enviar la evidencia.' });
-} finally {
-  setBusy(false);
-}
-return; }
+          if (!data.valido) {
+            updateMessage(assistantId, { status: 'error', error: data.mensaje || 'El documento no pudo ser validado.' });
+          } else {
+            updateMessage(assistantId, { status: 'success', result: { mensaje: data.mensaje } });
+          }
+        } catch (err) {
+          updateMessage(assistantId, { status: 'error', error: err.message || 'Ocurrió un error al enviar la evidencia.' });
+        } finally {
+          setBusy(false);
+        }
+        return;
+      }
 
       // Flujo de conversación con el asistente
       const assistantId = nextId();
@@ -466,7 +581,7 @@ return; }
       try {
         // Chat Frontend -> n8n -> Zoe
         // IMPORTANTE: durante la prueba n8n debe estar en "Listen for test event".
-       const N8N_WEBHOOK_URL = import.meta.env.VITE_ZOE_WEBHOOK_URL;
+        const N8N_WEBHOOK_URL = envUrl('VITE_ZOE_WEBHOOK_URL');
 
         let respuestaHttp;
 
@@ -478,6 +593,7 @@ return; }
             },
             body: JSON.stringify({
               identificador: activeId,
+              rol: role,
               mensaje: textToSend,
             }),
           });
@@ -531,7 +647,7 @@ return; }
         setBusy(false);
       }
     },
-    [inputText, pendingFile, activeId, updateMessage]
+    [inputText, pendingFile, activeId, updateMessage, envUrl, role]
   );
 
   const onComposerKeyDown = (e) => {
@@ -623,16 +739,16 @@ return; }
 
           <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 11px 5px 8px', borderRadius: 999, background: p.eyebrowBg, border: `1px solid ${p.eyebrowBorder}`, marginBottom: 14 }}>
             <span style={{ color: p.eyebrowIcon, display: 'flex' }}><IconSparkle size={12} /></span>
-            <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.09em', color: p.headerText }}>EN LÍNEA</span>
+            <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.09em', color: p.headerText }}>{cfg.eyebrow}</span>
             <span style={{ position: 'relative', width: 6, height: 6 }}>
               <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: p.liveDot, animation: 'aiPulseRing 2s infinite' }} />
               <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: p.liveDot }} />
             </span>
           </div>
 
-          <h2 className="ai-banner-title" style={{ position: 'relative', margin: '0 0 6px', fontWeight: 800, letterSpacing: '-0.3px', maxWidth: 380, color: p.headerText }}>Asistente IA</h2>
+          <h2 className="ai-banner-title" style={{ position: 'relative', margin: '0 0 6px', fontWeight: 800, letterSpacing: '-0.3px', maxWidth: 380, color: p.headerText }}>{cfg.title}</h2>
           <p style={{ position: 'relative', margin: 0, fontSize: 13.5, color: p.headerSubText, maxWidth: 400, lineHeight: 1.55 }}>
-            Pregúntame lo que necesites o adjunta una evidencia y la envío a revisión por ti
+            {cfg.subtitle}
           </p>
         </div>
       </div>
@@ -646,13 +762,13 @@ return; }
               <IconSparkle size={24} />
             </div>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: colors.text, fontFamily: "'Sora','Inter','Segoe UI',sans-serif" }}>¿En qué te puedo ayudar hoy?</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: colors.text, fontFamily: "'Sora','Inter','Segoe UI',sans-serif" }}>{cfg.emptyTitle}</div>
               <div style={{ fontSize: 13, color: colors.textFaint, marginTop: 4, maxWidth: 320 }}>
-                Escribe tu pregunta o arrastra un archivo aquí para enviarlo a revisión.
+                {cfg.emptySubtitle}
               </div>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', maxWidth: 420 }}>
-              {QUICK_PROMPTS.map((qp) => (
+              {cfg.quickPrompts.map((qp) => (
                 <button
                   key={qp.label}
                   className="ai-quick-btn"
@@ -910,10 +1026,10 @@ function ChatRow({ message, colors, theme, palette }) {
           <div
             className="ai-bubble"
             style={isUser
-              ? { ...bubbleBase, background: p.userBubbleBg, color: p.userBubbleText, marginBottom: message.file ? 6 : 0 }
+              ? { ...bubbleBase, background: p.userBubbleBg, color: p.userBubbleText, marginBottom: message.file ? 6 : 0, whiteSpace: 'pre-wrap' }
               : { ...assistantBubbleStyle, marginBottom: message.file ? 6 : 0 }}
           >
-            {message.text}
+            {isUser ? message.text : <BotMarkdown text={message.text} colors={colors} palette={p} />}
           </div>
         )}
 
@@ -977,7 +1093,7 @@ function ChatRow({ message, colors, theme, palette }) {
           <div className="ai-bubble" style={assistantBubbleStyle}>
             <ApprovalStamp palette={p} />
             {message.result?.mensaje || message.result?.message ? (
-              <div>{message.result.mensaje || message.result.message}</div>
+              <BotMarkdown text={message.result.mensaje || message.result.message} colors={colors} palette={p} />
             ) : (
               <div style={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: 11.5, color: colors.textSecondary }}>
                 {JSON.stringify(message.result, null, 2)}

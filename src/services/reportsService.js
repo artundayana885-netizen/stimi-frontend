@@ -114,19 +114,54 @@ export async function updateReport(id, payload = {}) {
 /**
  * Crea un nuevo informe (GC o GF) enviado por el instructor.
  * @param {{type: 'GC'|'GF', id_version?: number, fileName: string, status: string, instructor: string, date: string}} reportData
+ * @param {File} [archivo] - el archivo real (PDF/Word) que subió el instructor.
+ *   Si se manda, se envía como multipart/form-data en el campo "archivo" y el
+ *   backend lo guarda en disco (ver informe.controller.ts), para poder
+ *   descargarlo tal cual más adelante con downloadReportFile().
  * @returns {Promise<Object>} informe creado, ya mapeado
  *
  * ⚠️ Traduce `type` -> `tipologia`, porque así se llama la columna real en
  * la entidad `Informe` del backend (ver informe.entity.ts).
  */
-export async function createReport(reportData = {}) {
+export async function createReport(reportData = {}, archivo) {
   const { type, ...rest } = reportData;
-  const body = {
-    ...rest,
-    tipologia: type,
-  };
+
+  if (archivo) {
+    const formData = new FormData();
+    Object.entries({ ...rest, tipologia: type }).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) formData.append(key, value);
+    });
+    formData.append('archivo', archivo);
+
+    // Igual que en revisarGc(): se anula el Content-Type fijo de apiClient
+    // para que el navegador genere el boundary correcto del multipart.
+    const { data } = await apiClient.post('/informe', formData, {
+      headers: { 'Content-Type': undefined },
+    });
+    return mapInforme(data);
+  }
+
+  const body = { ...rest, tipologia: type };
   const { data } = await apiClient.post('/informe', body);
   return mapInforme(data);
+}
+
+/**
+ * Descarga el archivo ORIGINAL que el instructor subió al crear el informe
+ * (no una recreación con los datos del formulario).
+ * @param {number|string} id - id_informe
+ * @returns {Promise<Blob>} el archivo tal cual, listo para guardarse
+ *
+ * Si el informe no tiene un archivo real guardado (por ejemplo, informes
+ * creados antes de que existiera esta funcionalidad), el backend responde
+ * 404 y esta función deja que el error se propague para que quien la llame
+ * pueda mostrar un mensaje o usar un respaldo.
+ */
+export async function downloadReportFile(id) {
+  const response = await apiClient.get(`/informe/${id}/archivo`, {
+    responseType: 'blob',
+  });
+  return response.data;
 }
 
 /**

@@ -30,6 +30,7 @@ function App() {
     setUser(null);
     try {
       localStorage.removeItem('sena_user');
+      localStorage.removeItem('sitmi_token');
     } catch {
       // ignorar si localStorage no está disponible
     }
@@ -41,14 +42,14 @@ function App() {
         user.role === 'instructor' ? (
           <InstructorDashboard user={user} onLogout={handleLogout} />
         ) : (
-        <CoordinatorDashboard
-         user={user}
-          onLogout={handleLogout}
+          <CoordinatorDashboard
+            user={user}
+            onLogout={handleLogout}
             pendingUsers={pendingUsers}
-             setPendingUsers={setPendingUsers}
-                notifications={notifications}
-                setNotifications={setNotifications}
-                />
+            setPendingUsers={setPendingUsers}
+            notifications={notifications}
+            setNotifications={setNotifications}
+          />
         )
       ) : (
         <LoginScreen onLogin={handleLogin} />

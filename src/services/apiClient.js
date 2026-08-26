@@ -43,7 +43,7 @@ apiClient.interceptors.response.use(
       // Intentar extraer el mensaje específico enviado por el backend.
       // Soporta los formatos típicos de NestJS ("error"/"message") y el
       // de las respuestas de n8n ("mensaje", en español).
-      const backendMessage = data?.error || data?.message || data?.mensaje;
+      const backendMessage = data?.message || data?.mensaje || data?.error;
       const formattedMessage = Array.isArray(backendMessage)
         ? backendMessage.join(', ')
         : backendMessage;
