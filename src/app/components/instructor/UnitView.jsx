@@ -986,6 +986,11 @@ export default function UnitView({ userName }) {
       <path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
     </svg>
   );
+  const IconEye = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" /><circle cx="12" cy="12" r="3" />
+    </svg>
+  );
 
   return (
     <div style={{ fontFamily: "'Inter','Segoe UI',sans-serif", color: colors.text, minHeight: '100%', padding: isMobile ? '0 2px' : 0 }}>
@@ -1204,9 +1209,7 @@ export default function UnitView({ userName }) {
                 </div>
                 <span style={S.badge(r.color)}>{r.status}</span>
                 <div style={{ display: 'flex', gap: 6, marginLeft: isMobile ? 'auto' : 0 }}>
-                  <ActionButton title="Descargar" onClick={() => handleDownload(r)}><IconDownload /></ActionButton>
-                  <ActionButton title="Detalles" onClick={() => openReportModal(r, 'info')}><IconInfo /></ActionButton>
-                  <ActionButton title="Borrar" danger onClick={() => handleDelete(r)}><IconTrash /></ActionButton>
+                  <ActionButton title="Visualizar" onClick={() => openReportModal(r, 'doc')}><IconEye /></ActionButton>
                 </div>
               </div>
             ))}
