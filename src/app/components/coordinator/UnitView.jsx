@@ -74,7 +74,19 @@ function parseDateForTile(raw) {
 function reportTimestamp(raw) {
   if (!raw) return 0;
   if (raw.includes('/')) {
-    const [d, m, y] = raw.split('/');
+    const parts = raw.split('/');
+    // Formato real usado en todo el sistema para informes: "MM/AAAA"
+    // (mes/año, SIN día — así lo guarda mapInforme() en reportsService.js).
+    // Antes esta función solo sabía leer "DD/MM/AAAA" (3 partes), así que
+    // con solo 2 partes calculaba una fecha inválida y el informe quedaba
+    // invisible para cualquier filtro de mes, siempre, sin excepción — por
+    // eso el panel del coordinador mostraba 0 en todo aunque sí hubiera
+    // informes reales cargados.
+    if (parts.length === 2) {
+      const [m, y] = parts;
+      return new Date(`${y}-${m?.padStart(2, '0')}-01`).getTime() || 0;
+    }
+    const [d, m, y] = parts;
     const year = y?.length === 2 ? `20${y}` : y;
     return new Date(`${year}-${m?.padStart(2, '0')}-${d?.padStart(2, '0')}`).getTime() || 0;
   }

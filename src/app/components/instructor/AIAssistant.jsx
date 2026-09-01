@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useTheme } from '../../../ThemeContext';
 import apiClient from '../../../services/apiClient';
 import { enviarMensajeZoe } from '../../../services/zoeService';
+import { leerRespuestaSegura } from '../../../services/safeJson';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -557,7 +558,15 @@ export default function AIAssistant({ role = 'coordinador', userId = 'default' }
             method: 'POST',
             body: formData,
           });
-          const data = await res.json();
+
+          if (!res.ok) {
+            const errorText = await res.text().catch(() => '');
+            throw new Error(
+              `El servidor de automatización respondió con error HTTP ${res.status}${errorText ? `: ${errorText.slice(0, 200)}` : ''}`
+            );
+          }
+
+          const data = await leerRespuestaSegura(res);
 
           if (!data.valido) {
             updateMessage(assistantId, { status: 'error', error: data.mensaje || 'El documento no pudo ser validado.' });
@@ -616,9 +625,14 @@ export default function AIAssistant({ role = 'coordinador', userId = 'default' }
         let data;
 
         if (contentType.includes('application/json')) {
-          data = await respuestaHttp.json();
+          data = await leerRespuestaSegura(respuestaHttp);
         } else {
           const textResponse = await respuestaHttp.text();
+          if (!textResponse || !textResponse.trim()) {
+            throw new Error(
+              'El servidor de automatización (n8n) respondió vacío. Verifica que el workflow esté activo.'
+            );
+          }
           data = { mensaje: textResponse };
         }
 

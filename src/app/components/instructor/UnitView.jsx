@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, Component } from 'react';
 import { useTheme } from '../../../ThemeContext';
 import { getReports, deleteReport, getReportTraceability, downloadReportFile } from '../../../services/reportsService';
 import jsPDF from 'jspdf';
+import mammoth from 'mammoth';
 
 const sena     = '#39A900';
 const senaDeep = '#1F6B0A';
@@ -362,18 +363,71 @@ class DocumentViewerErrorBoundary extends Component {
 
 // ── Visor de documento de solo lectura, con las mismas marcas
 // (resaltado / tachón / comentario) que dejó el coordinador al revisar.
+// ── Muestra el archivo ORIGINAL que se subió (PDF/Word/imagen), tal cual
+// quedó guardado en el backend (GET /informe/:id/archivo), con las marcas
+// que dejó el coordinador (si las hay) superpuestas encima, en modo solo
+// lectura. Antes esto dibujaba una plantilla "SENA" fabricada con datos
+// del formulario (Instructor/Tipo/Período) — nunca era el documento real
+// que el instructor subió, solo un resumen con apariencia de informe.
 function ReadOnlyDocumentViewer({ report }) {
-  // ── Blindaje: si filePages llega como algo que no sea un número
-  // entero positivo (undefined, NaN, string no numérico, 0, negativo),
-  // Array.from({ length }) puede lanzar un RangeError y tumbar todo el
-  // árbol de React sin aviso, dejando la pestaña en blanco. Por eso
-  // siempre normalizamos a un entero válido antes de generar las páginas.
-  const rawPages = Number(report?.filePages);
-  const totalPages = Number.isFinite(rawPages) && rawPages > 0 ? Math.floor(rawPages) : 1;
+  const [state, setState] = useState({ loading: true, error: null, notFound: false, blobUrl: null, docxHtml: null, kind: null });
   const safeMarcas = Array.isArray(report?.marcas) ? report.marcas : [];
-  const pages = Array.from({ length: totalPages }, (_, i) => i + 1);
 
-  return (
+  useEffect(() => {
+    let cancelled = false;
+    let localBlobUrl = null;
+    setState({ loading: true, error: null, notFound: false, blobUrl: null, docxHtml: null, kind: null });
+
+    (async () => {
+      try {
+        const blob = await downloadReportFile(report.id);
+        if (cancelled) return;
+
+        const name = report.fileName || report.name || '';
+        const isPdf = /\.pdf$/i.test(name) || blob.type === 'application/pdf';
+        const isDocx = /\.docx?$/i.test(name);
+        const isImage = /\.(jpe?g|png|gif|webp)$/i.test(name) || /^image\//.test(blob.type || '');
+
+        if (isDocx) {
+          const arrayBuffer = await blob.arrayBuffer();
+          const result = await mammoth.convertToHtml({ arrayBuffer });
+          if (cancelled) return;
+          setState({ loading: false, error: null, notFound: false, blobUrl: null, docxHtml: result.value, kind: 'docx' });
+        } else {
+          localBlobUrl = URL.createObjectURL(blob);
+          setState({
+            loading: false, error: null, notFound: false, docxHtml: null,
+            blobUrl: localBlobUrl, kind: isPdf ? 'pdf' : (isImage ? 'image' : 'other'),
+          });
+        }
+      } catch (err) {
+        if (cancelled) return;
+        if (err?.status === 404) {
+          setState({ loading: false, error: null, notFound: true, blobUrl: null, docxHtml: null, kind: null });
+        } else {
+          setState({ loading: false, error: err.message || 'No se pudo cargar el documento.', notFound: false, blobUrl: null, docxHtml: null, kind: null });
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (localBlobUrl) URL.revokeObjectURL(localBlobUrl);
+    };
+  }, [report.id, report.fileName]);
+
+  // Igual que en el visor del coordinador: sin pdf.js no conocemos la
+  // paginación real, así que las marcas se muestran como una sola capa
+  // sobre todo el documento visible (página 1), no ancladas a una página
+  // exacta del PDF.
+  const withMarksOverlay = (children) => (
+    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 400 }}>
+      {children}
+      <ReadOnlyAnnotationLayer pageNum={1} annotations={safeMarcas.map(m => ({ ...m, page: 1 }))} />
+    </div>
+  );
+
+  const wrap = (children) => (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -385,41 +439,66 @@ function ReadOnlyDocumentViewer({ report }) {
             {report.fileName || report.name}
           </span>
         </div>
-        <span style={{ fontSize: 12, color: '#9ca3af' }}>{totalPages} página{totalPages === 1 ? '' : 's'}</span>
       </div>
-
-      <div style={{
-        flex: 1, overflowY: 'auto', background: viewerTrayColor,
-        padding: 16, borderRadius: '0 0 10px 10px', display: 'flex', flexDirection: 'column', gap: 16,
-      }}>
-        {pages.map((pageNum) => (
-          <div key={pageNum} style={{
-            position: 'relative', background: '#fff', borderRadius: 8, padding: '32px 28px', minHeight: 400,
-            boxShadow: '0 4px 20px rgba(0,0,0,0.3)', fontFamily: "'Times New Roman', serif",
-          }}>
-            <div style={{ textAlign: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: '2px solid #111827' }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', letterSpacing: 1, textTransform: 'uppercase' }}>
-                Servicio Nacional de Aprendizaje — SENA
-              </div>
-              <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>Sistema de Información y Trazabilidad del Instructor</div>
-              <div style={{ marginTop: 10, display: 'inline-block', background: report.type === 'GC' ? '#EAF3E4' : '#E7EEF2', color: report.type === 'GC' ? '#007832' : '#00304D', padding: '3px 14px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>
-                INFORME {report.type} — {(report.month || '').toString().toUpperCase()}
-              </div>
-            </div>
-
-            {renderDocPageBody(pageNum, report)}
-
-            <div style={{ marginTop: 24, paddingTop: 12, borderTop: '1px solid #E8ECF0', display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#9CA3AF' }}>
-              <span>SENA — SITMI</span>
-              <span>Página {pageNum} de {totalPages}</span>
-              <span>{report.rawDate}</span>
-            </div>
-
-            <ReadOnlyAnnotationLayer pageNum={pageNum} annotations={safeMarcas} />
-          </div>
-        ))}
+      <div style={{ flex: 1, minHeight: 0, background: viewerTrayColor, borderRadius: '0 0 10px 10px', overflow: 'auto' }}>
+        {children}
       </div>
     </div>
+  );
+
+  if (state.loading) {
+    return wrap(
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af', fontSize: 13 }}>
+        Cargando documento original…
+      </div>
+    );
+  }
+
+  if (state.notFound) {
+    return wrap(
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#d1d5db', fontSize: 13, textAlign: 'center', padding: 24, gap: 8 }}>
+        <Icon.FileText size={28} />
+        <div>Este informe no tiene un archivo original guardado en el servidor.</div>
+      </div>
+    );
+  }
+
+  if (state.error) {
+    return wrap(
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#f87171', fontSize: 13, textAlign: 'center', padding: 24 }}>
+        {state.error}
+      </div>
+    );
+  }
+
+  if (state.kind === 'pdf' || state.kind === 'other') {
+    return wrap(
+      withMarksOverlay(
+        <iframe src={state.blobUrl} title={report.fileName} style={{ width: '100%', height: '100%', border: 'none', minHeight: 400 }} />
+      )
+    );
+  }
+
+  if (state.kind === 'image') {
+    return wrap(
+      withMarksOverlay(
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 20 }}>
+          <img src={state.blobUrl} alt={report.fileName} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8 }} />
+        </div>
+      )
+    );
+  }
+
+  // docx
+  return wrap(
+    withMarksOverlay(
+      <div style={{ padding: '32px 28px' }}>
+        <div
+          style={{ background: '#fff', borderRadius: 10, padding: '36px 44px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', maxWidth: 760, margin: '0 auto', color: '#111827', fontSize: 14, lineHeight: 1.7 }}
+          dangerouslySetInnerHTML={{ __html: state.docxHtml }}
+        />
+      </div>
+    )
   );
 }
 

@@ -283,7 +283,7 @@ export default function SettingsView({ userName }) {
       <style>{`
         .sv-root { width: 100%; box-sizing: border-box; }
         .sv-root *, .sv-root *::before, .sv-root *::after { box-sizing: border-box; }
-        .sv-content-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+        .sv-content-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
         .sv-appearance-preview { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
         .sv-avatar-row { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
         .sv-notif-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -620,53 +620,8 @@ export default function SettingsView({ userName }) {
           </div>
         </div>
 
-        {/* Right column */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Help */}
-          <div style={{ background: theme === 'dark' ? '#0F2A18' : '#F0FDF4', borderRadius: 16, padding: '20px', border: `1px solid ${theme === 'dark' ? '#1F4A2E' : '#BBF7D0'}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 15, fontWeight: 700, color: theme === 'dark' ? '#4ADE80' : GREEN_DARK, marginBottom: 16 }}><Icon.Help /> Información de Ayuda</div>
-            {[
-              { label: 'Soporte técnico', value: 'soporte@sena.edu.co' },
-              { label: 'Coordinador',     value: 'coordinador@sena.edu.co' },
-              { label: 'Teléfono',        value: '(601) 5461500' },
-            ].map((item, i) => (
-              <div key={i} style={{ background: colors.card, borderRadius: 10, padding: '10px 12px', marginBottom: 8, border: `1px solid ${theme === 'dark' ? '#1F4A2E' : '#D1FAE5'}` }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: colors.textFaint, textTransform: 'uppercase', marginBottom: 2 }}>{item.label}</div>
-                <div style={{ fontSize: 13, color: colors.text }}>{item.value}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Language */}
-          <div className="sv-card" style={card}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 15, fontWeight: 700, marginBottom: 16 }}><Icon.Globe /> Idioma y región</div>
-            <div style={{ marginBottom: 14 }}>
-              <label style={labelStyle}>Idioma</label>
-              <select style={{ ...inputStyle, cursor: 'pointer' }} value={language} onChange={e => setLanguage(e.target.value)}>
-                <option value="Español">Español</option>
-                <option value="English">English</option>
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Zona horaria</label>
-              <select style={{ ...inputStyle, cursor: 'pointer' }} value={timezone} onChange={e => setTimezone(e.target.value)}>
-                <option value="Colombia (GMT-5)">Colombia (GMT-5)</option>
-                <option value="México (GMT-6)">México (GMT-6)</option>
-              </select>
-            </div>
-          </div>
-        </div>
       </div>
 
-      <div style={{ marginTop: 20 }}>
-        <button className="sv-save-btn" onClick={() => {
-          localStorage.setItem('sena_lang', language);
-          localStorage.setItem('sena_timezone', timezone);
-          showToast('✓ Configuración guardada correctamente');
-        }} style={{ padding: '12px 28px', borderRadius: 12, border: 'none', background: theme === 'dark' ? `linear-gradient(135deg, #4ADE80, #16A34A)` : `linear-gradient(135deg, ${GREEN}, ${GREEN_DARK})`, color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer', boxShadow: theme === 'dark' ? '0 4px 14px rgba(74,222,128,0.3)' : '0 4px 14px rgba(31,107,10,0.4)' }}>
-          <Icon.Bolt /> Guardar Cambios
-        </button>
-      </div>
     </div>
   );
 }
