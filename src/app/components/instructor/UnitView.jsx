@@ -553,7 +553,7 @@ export default function UnitView({ userName }) {
     try {
       let currentUserName = '';
       try {
-        const savedUser = localStorage.getItem('sena_user');
+        const savedUser = sessionStorage.getItem('sena_user');
         if (savedUser) {
           const parsed = JSON.parse(savedUser);
           currentUserName = parsed.name || '';

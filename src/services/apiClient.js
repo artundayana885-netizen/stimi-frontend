@@ -20,7 +20,7 @@ const apiClient = axios.create({
 // Interceptor de peticiones: adjuntar token de autorización automáticamente si existe
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('sitmi_token');
+    const token = sessionStorage.getItem('sitmi_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -54,9 +54,9 @@ apiClient.interceptors.response.use(
           break;
         case 401:
           customErrorMsg = formattedMessage || 'Sesión no autorizada. Por favor, inicia sesión de nuevo.';
-          // Opcional: Cerrar sesión limpiando el almacenamiento local
-          localStorage.removeItem('sena_user');
-          localStorage.removeItem('sitmi_token');
+          // Opcional: Cerrar sesión limpiando el almacenamiento de sesión
+          sessionStorage.removeItem('sena_user');
+          sessionStorage.removeItem('sitmi_token');
           // Podríamos redirigir si se desea (window.location.href = '/login')
           break;
         case 403:

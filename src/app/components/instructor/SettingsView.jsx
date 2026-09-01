@@ -103,7 +103,7 @@ const getAvatarKey = (email) => `sena_avatar_${email || 'default'}`;
 
 export default function SettingsView({ userName }) {
   const { theme, toggleTheme, colors } = useTheme();
-  const savedUser = JSON.parse(localStorage.getItem('sena_user') || '{}');
+  const savedUser = JSON.parse(sessionStorage.getItem('sena_user') || '{}');
   const userEmail = savedUser.email || 'instructor@sena.edu.co';
   const avatarKey = getAvatarKey(userEmail);
 

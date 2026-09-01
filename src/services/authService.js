@@ -21,15 +21,16 @@ export async function loginUser(email, password) {
     throw new Error('PENDIENTE');
   }
 
-  // Guardamos la sesión localmente
-  localStorage.setItem('sena_user', JSON.stringify(userProfile));
+  // Guardamos la sesión en esta pestaña (sessionStorage, no localStorage:
+  // así una pestaña/ventana nueva siempre pide iniciar sesión de nuevo).
+  sessionStorage.setItem('sena_user', JSON.stringify(userProfile));
 
   // Si en el futuro el backend implementa JWT Token, lo guardamos así:
   if (data.token) {
-    localStorage.setItem('sitmi_token', data.token);
+    sessionStorage.setItem('sitmi_token', data.token);
   } else {
     // Por ahora simulamos un token estático para cumplir con el interceptor de apiClient
-    localStorage.setItem('sitmi_token', 'simulated_session_token');
+    sessionStorage.setItem('sitmi_token', 'simulated_session_token');
   }
 
   return userProfile;
@@ -37,13 +38,12 @@ export async function loginUser(email, password) {
 
 /**
  * Actualiza el nombre, correo y/o teléfono del usuario logueado y
- * refresca la copia guardada en localStorage con lo que confirme el
- * backend (fuente de verdad), para que quede igual en cualquier
- * dispositivo/sesión, no solo en este navegador.
+ * refresca la copia guardada en sessionStorage con lo que confirme el
+ * backend (fuente de verdad para esta sesión).
  */
 export async function updateProfile(id, { nombre, correo, telefono } = {}) {
   const { data } = await apiClient.put(`/usuario/${id}/profile`, { nombre, correo, telefono });
-  localStorage.setItem('sena_user', JSON.stringify(data.user));
+  sessionStorage.setItem('sena_user', JSON.stringify(data.user));
   return data.user;
 }
 
@@ -56,11 +56,11 @@ export async function registerUser(payload) {
 }
 
 /**
- * Cierra la sesión activa limpiando el almacenamiento local.
+ * Cierra la sesión activa limpiando el almacenamiento de sesión.
  */
 export function logoutUser() {
-  localStorage.removeItem('sena_user');
-  localStorage.removeItem('sitmi_token');
+  sessionStorage.removeItem('sena_user');
+  sessionStorage.removeItem('sitmi_token');
 }
 
 /**

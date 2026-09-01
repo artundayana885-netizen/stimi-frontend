@@ -18,7 +18,7 @@ import FilePreviewModal from './FilePreviewModal';
        export async function getReports() { ... }   // devuelve TODOS los informes
 
    y aquí filtro por instructor en el cliente, comparando con el nombre
-   guardado en localStorage('sena_user'), tal como hace ReportGC/ReportGF.
+   guardado en sessionStorage('sena_user'), tal como hace ReportGC/ReportGF.
 
    Si tu función se llama distinto o ya filtra por instructor en el backend,
    solo ajusta la línea del import y la llamada dentro de fetchReports() —
@@ -103,7 +103,7 @@ function monthLabel(date) {
 }
 function currentUserName() {
   try {
-    const saved = localStorage.getItem('sena_user');
+    const saved = sessionStorage.getItem('sena_user');
     if (saved) return JSON.parse(saved).name || 'Instructor';
   } catch (e) { /* noop */ }
   return 'Instructor';

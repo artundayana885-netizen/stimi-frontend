@@ -52,7 +52,7 @@ export default function ReportGF({ onBack }) {
 
     let currentUserName = 'Instructor';
     try {
-      const savedUser = localStorage.getItem('sena_user');
+      const savedUser = sessionStorage.getItem('sena_user');
       if (savedUser) {
         currentUserName = JSON.parse(savedUser).name || 'Instructor';
       }

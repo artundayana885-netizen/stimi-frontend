@@ -455,7 +455,7 @@ function ProfileField({ label, value, editing, onChange, type = 'text', editable
 
 export function SettingsView({ userName, darkMode = false, onToggleDarkMode }) {
   const { colors, theme } = useTheme();
-  const savedUser = JSON.parse(localStorage.getItem('sena_user') || '{}');
+  const savedUser = JSON.parse(sessionStorage.getItem('sena_user') || '{}');
   const userEmail = savedUser.email || '';
   const [currPass, setCurrPass] = useState('');
   const [newPass, setNewPass] = useState('');
