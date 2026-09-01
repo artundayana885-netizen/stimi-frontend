@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../../../ThemeContext';
-import { changePassword } from '../../../services/authService';
+import { changePassword, updateProfile } from '../../../services/authService';
 
 
 // Colores institucionales (mismos que el resto de la app)
@@ -111,6 +111,42 @@ export default function SettingsView({ userName }) {
   const [notifReminder, setNotifReminder] = useState(true);
   const [notifUpdates, setNotifUpdates]   = useState(false);
   const [toast, setToast] = useState(null);
+
+  // ── Perfil (nombre, correo, teléfono) ───────────────────────────────
+  // Antes el input de "Nombre completo" era decorativo (`defaultValue`
+  // sin `onChange` ni botón de guardar): escribir ahí no hacía nada y se
+  // perdía al recargar la página. Ahora sí es un formulario real que
+  // guarda en la base de datos (no solo en localStorage), igual que el
+  // panel del coordinador.
+  const [profileForm, setProfileForm] = useState({
+    nombre: savedUser.name || userName || '',
+    email: savedUser.email || userEmail,
+    telefono: savedUser.telefono || '',
+  });
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  const handleSaveProfile = async () => {
+    if (!profileForm.nombre.trim()) {
+      showToast('El nombre completo es obligatorio', '#ef4444');
+      return;
+    }
+    if (!savedUser.id) {
+      showToast('No se pudo identificar tu cuenta; vuelve a iniciar sesión.', '#ef4444');
+      return;
+    }
+    setSavingProfile(true);
+    try {
+      await updateProfile(savedUser.id, {
+        nombre: profileForm.nombre,
+        telefono: profileForm.telefono,
+      });
+      showToast('Perfil actualizado exitosamente');
+    } catch (err) {
+      showToast(err.message || 'No se pudo guardar el perfil', '#ef4444');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   // ── Nuevas preferencias ──────────────────────────────────────────────
   const [density, setDensity]     = useState('comfortable'); // 'comfortable' | 'compact'
@@ -391,9 +427,36 @@ export default function SettingsView({ userName }) {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: rowGap }}>
-              <div><label style={labelStyle}>Nombre completo</label><input style={inputStyle} defaultValue={userName} /></div>
+              <div>
+                <label style={labelStyle}>Nombre completo</label>
+                <input
+                  style={inputStyle}
+                  value={profileForm.nombre}
+                  onChange={(e) => setProfileForm(prev => ({ ...prev, nombre: e.target.value }))}
+                />
+              </div>
               <div><label style={labelStyle}>Correo electrónico</label><input style={{ ...inputStyle, cursor: 'not-allowed', opacity: 0.7 }} type="email" defaultValue={userEmail} readOnly /></div>
-              <div><label style={labelStyle}>Teléfono</label><input style={inputStyle} type="tel" defaultValue="+57 300 123 4567" /></div>
+              <div>
+                <label style={labelStyle}>Teléfono</label>
+                <input
+                  style={inputStyle}
+                  type="tel"
+                  value={profileForm.telefono}
+                  onChange={(e) => setProfileForm(prev => ({ ...prev, telefono: e.target.value }))}
+                />
+              </div>
+              <button
+                onClick={handleSaveProfile}
+                disabled={savingProfile}
+                style={{
+                  alignSelf: 'flex-start', marginTop: 4, padding: '9px 20px', borderRadius: 10,
+                  border: 'none', background: savingProfile ? colors.borderStrong : GREEN,
+                  color: '#fff', fontSize: 13.5, fontWeight: 700,
+                  cursor: savingProfile ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {savingProfile ? 'Guardando...' : 'Guardar cambios'}
+              </button>
             </div>
           </div>
 

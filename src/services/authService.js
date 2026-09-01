@@ -36,6 +36,18 @@ export async function loginUser(email, password) {
 }
 
 /**
+ * Actualiza el nombre, correo y/o teléfono del usuario logueado y
+ * refresca la copia guardada en localStorage con lo que confirme el
+ * backend (fuente de verdad), para que quede igual en cualquier
+ * dispositivo/sesión, no solo en este navegador.
+ */
+export async function updateProfile(id, { nombre, correo, telefono } = {}) {
+  const { data } = await apiClient.put(`/usuario/${id}/profile`, { nombre, correo, telefono });
+  localStorage.setItem('sena_user', JSON.stringify(data.user));
+  return data.user;
+}
+
+/**
  * Registra un nuevo usuario en la base de datos MySQL del backend.
  */
 export async function registerUser(payload) {

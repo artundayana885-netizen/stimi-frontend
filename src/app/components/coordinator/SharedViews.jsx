@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTheme } from '../../../ThemeContext';
-import { changePassword } from '../../../services/authService';
+import { changePassword, updateProfile } from '../../../services/authService';
 
 /* ============================================================
    ICONOS — línea profesional, 2px de trazo, sin relleno.
@@ -417,17 +417,22 @@ function SectionCard({ icon, iconBg, title, children, headerAction }) {
 
 const PROFILE_FIELDS = [
   { key: 'nombre', label: 'Nombre completo', editable: true },
-  { key: 'rol', label: 'Rol', editable: true },
+  // Rol y Centro de formación son de solo lectura aquí a propósito: el rol
+  // lo asigna el coordinador desde "Gestión de Usuarios" y el centro de
+  // formación viene de la sede/área asignada al registrar la cuenta — no
+  // tiene sentido dejar que el propio usuario los cambie desde su perfil.
+  { key: 'rol', label: 'Rol', editable: false },
   { key: 'email', label: 'Email', editable: true, type: 'email' },
-  { key: 'unidad', label: 'Centro de formación', editable: true },
+  { key: 'unidad', label: 'Centro de formación', editable: false },
 ];
 
-function ProfileField({ label, value, editing, onChange, type = 'text' }) {
+function ProfileField({ label, value, editing, onChange, type = 'text', editable = true }) {
   const { colors } = useTheme();
+  const isEditingThisField = editing && editable;
   return (
     <div>
       <div style={{ fontSize: 11, fontWeight: 600, color: colors.textFaint, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{label}</div>
-      {editing ? (
+      {isEditingThisField ? (
         <input
           type={type}
           value={value}
@@ -470,11 +475,17 @@ export function SettingsView({ userName, darkMode = false, onToggleDarkMode }) {
   });
 
   const [editingProfile, setEditingProfile] = useState(false);
+  // Rol y "Centro de formación" (unidad) vienen del backend real —
+  // ANTES se leían de localStorage con `savedUser.rol`/`savedUser.unidad`,
+  // campos que el login nunca guardaba, por eso siempre salían "No
+  // especificado" aunque el coordinador ya te hubiera asignado un rol y
+  // área/sede/centro reales. Ahora usan `savedUser.role` y
+  // `savedUser.centro`, que sí llegan del backend.
   const [profileData, setProfileData] = useState(() => ({
-    nombre: userName || savedUser.nombre || '',
-    rol: savedUser.rol || '',
+    nombre: userName || savedUser.name || '',
+    rol: savedUser.role ? (savedUser.role === 'coordinator' ? 'Coordinador' : 'Instructor') : '',
     email: userEmail,
-    unidad: savedUser.unidad || '',
+    unidad: savedUser.centro || savedUser.area || '',
   }));
   const [profileForm, setProfileForm] = useState(profileData);
 
@@ -519,7 +530,7 @@ export function SettingsView({ userName, darkMode = false, onToggleDarkMode }) {
     setProfileForm(prev => ({ ...prev, [key]: e.target.value }));
   };
 
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
     if (!profileForm.nombre.trim()) {
       showToast('El nombre completo es obligatorio', BRAND.danger);
       return;
@@ -528,18 +539,20 @@ export function SettingsView({ userName, darkMode = false, onToggleDarkMode }) {
       showToast('El email es obligatorio', BRAND.danger);
       return;
     }
-
-    const updatedUser = {
-      ...savedUser,
-      name: profileForm.nombre,
-      nombre: profileForm.nombre,
-      rol: profileForm.rol,
-      email: profileForm.email,
-      unidad: profileForm.unidad,
-    };
+    if (!savedUser.id) {
+      showToast('No se pudo identificar tu cuenta; vuelve a iniciar sesión.', BRAND.danger);
+      return;
+    }
 
     try {
-      localStorage.setItem('sena_user', JSON.stringify(updatedUser));
+      // Guarda de verdad en la base de datos (antes solo se guardaba en
+      // localStorage, así que se perdía al cambiar de navegador/dispositivo
+      // o borrar caché). El rol y el centro de formación no se envían:
+      // esos los asigna el coordinador, no se editan desde aquí.
+      await updateProfile(savedUser.id, {
+        nombre: profileForm.nombre,
+        correo: profileForm.email,
+      });
       setProfileData(profileForm);
       setEditingProfile(false);
       showToast('Perfil actualizado exitosamente');
@@ -551,7 +564,7 @@ export function SettingsView({ userName, darkMode = false, onToggleDarkMode }) {
         kind: 'approved',
       });
     } catch (err) {
-      showToast('No se pudo guardar la información del perfil', BRAND.danger);
+      showToast(err.message || 'No se pudo guardar la información del perfil', BRAND.danger);
     }
   };
 
@@ -721,6 +734,7 @@ export function SettingsView({ userName, darkMode = false, onToggleDarkMode }) {
               label={f.label}
               value={editingProfile ? profileForm[f.key] : profileData[f.key]}
               editing={editingProfile}
+              editable={f.editable}
               type={f.type}
               onChange={handleProfileFieldChange(f.key)}
             />
