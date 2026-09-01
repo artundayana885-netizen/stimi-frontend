@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useTheme } from '../../../ThemeContext';
-import { getReports } from '../../../services/reportsService';
+import { getReports, downloadReportFile, deleteReport } from '../../../services/reportsService';
+import FilePreviewModal from './FilePreviewModal';
 
 /* ============================================================================
    ReportFolders
@@ -61,19 +62,30 @@ const IconAlert = (p) => (
     <path d="M12 9v4M12 17h.01" /><circle cx="12" cy="12" r="9" />
   </svg>
 );
+const IconDownload = (p) => (
+  <svg viewBox="0 0 24 24" width={p?.size || 14} height={p?.size || 14} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+);
+const IconTrash = (p) => (
+  <svg viewBox="0 0 24 24" width={p?.size || 14} height={p?.size || 14} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+  </svg>
+);
 
 const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-// El status ya llega como 'Pendiente' / 'Aprobado' / 'Rechazado' (igual que en ReportGC/ReportGF).
+// El status real que devuelve el backend es 'Pendiente' / 'Aprobado' / 'A Corregir'
+// (igual que en el panel del coordinador, ver STATUS_STYLES en ReportManagement.jsx).
 const STATUS_META = {
   Aprobado: { label: 'Aprobado', color: '#39A900', bg: 'rgba(57,169,0,0.12)' },
   Pendiente: { label: 'Pendiente', color: '#D97706', bg: 'rgba(217,119,6,0.12)' },
-  Rechazado: { label: 'Rechazado', color: '#DC2626', bg: 'rgba(220,38,38,0.12)' },
+  'A Corregir': { label: 'A Corregir', color: '#DC2626', bg: 'rgba(220,38,38,0.12)' },
 };
 const statusMeta = (s) => STATUS_META[s] || STATUS_META.Pendiente;
 
 function folderStatus(items) {
-  if (items.some((i) => i.status === 'Rechazado')) return 'Rechazado';
+  if (items.some((i) => i.status === 'A Corregir')) return 'A Corregir';
   if (items.some((i) => i.status === 'Pendiente')) return 'Pendiente';
   return 'Aprobado';
 }
@@ -103,6 +115,11 @@ export default function ReportFolders({ onOpenReport, refreshKey }) {
   const [query, setQuery] = useState('');
   const [reports, setReports] = useState([]);
   const [status, setStatus] = useState('loading'); // loading | ready | error
+  const [toast, setToast] = useState(null);
+  const [busyId, setBusyId] = useState(null); // id del informe con una acción (ver/descargar/eliminar) en curso
+  const [preview, setPreview] = useState(null); // { file, url } para FilePreviewModal
+
+  const showToast = (msg, color = '#16a34a') => { setToast({ msg, color }); setTimeout(() => setToast(null), 3000); };
 
   const fetchReports = useCallback(async () => {
     setStatus('loading');
@@ -118,6 +135,76 @@ export default function ReportFolders({ onOpenReport, refreshKey }) {
   }, []);
 
   useEffect(() => { fetchReports(); }, [fetchReports, refreshKey]);
+
+  // Trae el archivo real guardado en el backend y lo abre en el visor
+  // (mismo modal que usan ReportGC/ReportGF antes de enviar).
+  const handleView = async (report) => {
+    setBusyId(report.id);
+    try {
+      const blob = await downloadReportFile(report.id);
+      const name = report.fileName || `informe_${report.id}.pdf`;
+      const file = new File([blob], name, { type: blob.type });
+      setPreview({ file, url: URL.createObjectURL(file) });
+    } catch (err) {
+      if (err?.status === 404) {
+        showToast('Este informe no tiene un archivo original guardado en el servidor.', '#D97706');
+      } else {
+        showToast(err.message || 'Error al abrir el archivo', '#ef4444');
+      }
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const closePreview = () => {
+    if (preview?.url) URL.revokeObjectURL(preview.url);
+    setPreview(null);
+  };
+
+  const handleDownload = async (report) => {
+    setBusyId(report.id);
+    try {
+      const blob = await downloadReportFile(report.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = report.fileName || 'informe.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(`Descargando ${report.fileName}...`);
+    } catch (err) {
+      if (err?.status === 404) {
+        showToast('Este informe no tiene un archivo original guardado en el servidor.', '#D97706');
+      } else {
+        showToast(err.message || 'Error al descargar el archivo', '#ef4444');
+      }
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // Solo se puede eliminar mientras el informe sigue Pendiente (aún no lo
+  // revisó el coordinador). Al eliminarlo aquí, también desaparece del
+  // panel del coordinador porque ambos leen la misma tabla `informe` del
+  // backend — no hace falta ningún paso adicional.
+  const handleDelete = async (report) => {
+    if (report.status !== 'Pendiente') return;
+    const ok = window.confirm(`¿Eliminar el informe ${report.type} de ${report.date}? Esta acción no se puede deshacer.`);
+    if (!ok) return;
+
+    setBusyId(report.id);
+    try {
+      await deleteReport(report.id);
+      setReports((prev) => prev.filter((r) => r.id !== report.id));
+      showToast('Informe eliminado');
+    } catch (err) {
+      showToast(err.message || 'Error al eliminar el informe', '#ef4444');
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const groups = useMemo(() => {
     const map = new Map();
@@ -151,6 +238,8 @@ export default function ReportFolders({ onOpenReport, refreshKey }) {
 
   return (
     <div style={{ marginTop: 40 }}>
+      {toast && <div style={{ position: 'fixed', top: 24, right: 24, zIndex: 2000, background: toast.color, color: '#fff', padding: '12px 20px', borderRadius: 12, fontSize: 13, fontWeight: 600, boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>{toast.msg}</div>}
+      {preview && <FilePreviewModal file={preview.file} fileUrl={preview.url} onClose={closePreview} />}
       <style>{`
         @keyframes folderRise { from { opacity:0; transform:translateY(14px) scale(.97);} to { opacity:1; transform:translateY(0) scale(1);} }
         @keyframes paperSlide { from { opacity:0; transform:translateY(6px);} to { opacity:1; transform:translateY(0);} }
@@ -322,15 +411,35 @@ export default function ReportFolders({ onOpenReport, refreshKey }) {
                     <span style={{ fontSize: 11, fontWeight: 700, color: meta.color, background: meta.bg, borderRadius: 999, padding: '4px 10px', flexShrink: 0 }}>
                       {meta.label}
                     </span>
-                    {onOpenReport && (
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                       <button
                         className="rf-btn-ver"
-                        onClick={() => onOpenReport(r)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: '#fff', background: '#39A900', border: 'none', borderRadius: 8, padding: '7px 12px', cursor: 'pointer', transition: 'background .15s', flexShrink: 0 }}
+                        onClick={() => handleView(r)}
+                        disabled={busyId === r.id}
+                        title="Ver archivo"
+                        style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: '#fff', background: '#39A900', border: 'none', borderRadius: 8, padding: '7px 12px', cursor: busyId === r.id ? 'default' : 'pointer', opacity: busyId === r.id ? 0.6 : 1, transition: 'background .15s' }}
                       >
                         <IconEye /> Ver
                       </button>
-                    )}
+                      <button
+                        onClick={() => handleDownload(r)}
+                        disabled={busyId === r.id}
+                        title="Descargar"
+                        style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: colors.textSecondary, background: 'transparent', border: `1.5px solid ${colors.borderStrong}`, borderRadius: 8, padding: '7px 10px', cursor: busyId === r.id ? 'default' : 'pointer', opacity: busyId === r.id ? 0.6 : 1 }}
+                      >
+                        <IconDownload />
+                      </button>
+                      {r.status === 'Pendiente' && (
+                        <button
+                          onClick={() => handleDelete(r)}
+                          disabled={busyId === r.id}
+                          title="Eliminar"
+                          style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: '#ef4444', background: theme === 'dark' ? 'rgba(239,68,68,0.12)' : '#FEF2F2', border: '1.5px solid #FECACA', borderRadius: 8, padding: '7px 10px', cursor: busyId === r.id ? 'default' : 'pointer', opacity: busyId === r.id ? 0.6 : 1 }}
+                        >
+                          <IconTrash />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}

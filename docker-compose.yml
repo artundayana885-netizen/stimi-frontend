@@ -47,6 +47,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     ports:
       - "3000:3000"
+    volumes:
+      - stimi_uploads:/app/uploads
 
   # --- Frontend React (compilado y servido por nginx) ---
   frontend:
@@ -67,3 +69,4 @@ services:
 
 volumes:
   stimi_pgdata:
+  stimi_uploads:
