@@ -191,6 +191,45 @@ export async function deleteReport(id) {
 }
 
 /**
+ * Calcula el % de cumplimiento real de un instructor a partir de sus
+ * informes reales (misma fórmula que usa el panel del propio instructor
+ * en UnitView.jsx: informes con status 'Aprobado' sobre el total esperado
+ * en el año, 12 = uno por mes).
+ *
+ * Antes, Reports.jsx y ComplianceView.jsx (vista de coordinador) leían un
+ * campo `compliance` directo del usuario (`u.compliance`), pero ese campo
+ * NO existe en el backend (la tabla `usuario` no lo tiene) — por eso
+ * siempre llegaba `undefined`/`null` y el dashboard de coordinador mostraba
+ * "—" en todos lados aunque sí hubiera informes cargados. Esta función
+ * calcula el dato real cruzando los informes (`GET /informe`) con el
+ * nombre del instructor, igual que ya se hace del lado del instructor.
+ *
+ * @param {Array} reports - resultado de getReports() (ya mapeado)
+ * @returns {Object} mapa { [nombreInstructor]: porcentajeCumplimiento }
+ */
+const TOTAL_INFORMES_ESPERADOS_POR_ANIO = 12;
+
+export function computeComplianceByInstructor(reports = []) {
+  const approvedCountByInstructor = {};
+  reports.forEach((r) => {
+    const name = r.instructor;
+    if (!name) return;
+    if (!approvedCountByInstructor[name]) approvedCountByInstructor[name] = 0;
+    if (String(r.status || '').trim() === 'Aprobado') {
+      approvedCountByInstructor[name] += 1;
+    }
+  });
+
+  const result = {};
+  Object.keys(approvedCountByInstructor).forEach((name) => {
+    result[name] = Math.round(
+      (approvedCountByInstructor[name] / TOTAL_INFORMES_ESPERADOS_POR_ANIO) * 100
+    );
+  });
+  return result;
+}
+
+/**
  * Sube un PDF de GC para revisión.
  * @param {File} archivo - el PDF seleccionado por el instructor
  * @param {string} identificador - cédula o id del instructor

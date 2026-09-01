@@ -75,8 +75,13 @@ apiClient.interceptors.response.use(
       customErrorMsg = 'No se pudo conectar con el servidor. Verifica tu conexión de red o si el backend está encendido.';
     }
 
-    // Retornamos un error con el mensaje personalizado para que el hook o componente pueda atraparlo y mostrarlo
-    return Promise.reject(new Error(customErrorMsg));
+    // Retornamos un error con el mensaje personalizado para que el hook o componente pueda atraparlo y mostrarlo.
+    // Se conserva el código de estado HTTP (si lo hubo) en `err.status`, para
+    // que quien llame pueda distinguir, por ejemplo, un 404 "no existe el
+    // archivo" de cualquier otro error, sin tener que parsear el mensaje.
+    const err = new Error(customErrorMsg);
+    if (error.response) err.status = error.response.status;
+    return Promise.reject(err);
   }
 );
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTheme } from '../../../ThemeContext';
 import { getAllUsers } from '../../../services/authService';
+import { getReports, computeComplianceByInstructor } from '../../../services/reportsService';
 
 /* ============================================================
    Token de marca — colores OFICIALES del SENA (verificados).
@@ -35,9 +36,17 @@ const IconX = (p) => <Icon {...p}><line x1="18" y1="6" x2="6" y2="18" /><line x1
 // Paleta para asignar un color distinto a cada área que aparezca
 const AREA_COLORS = ['#39A900', '#6366f1', '#f97316', '#a855f7', '#0ea5e9', '#ef4444', '#14b8a6', '#eab308'];
 
-// Histórico mensual: aún no hay fuente de datos para esto (se retoma
-// cuando se conecte el cálculo real de cumplimiento por informes).
-const monthly = [];
+// Interpreta el campo `month` de un informe real (formato "MM/YYYY").
+function parseReportMonthKey(monthStr) {
+  const m = String(monthStr || '').match(/^(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+  return { idx: parseInt(m[1], 10) - 1, year: parseInt(m[2], 10) };
+}
+
+const MONTH_NAMES_FULL = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
 
 const MONTHS_COLLAPSED = 4;
 const RANK_COLORS = [BRAND.orangeMid, BRAND.greenBright, BRAND.greenMid];
@@ -121,11 +130,17 @@ export default function ComplianceView() {
   const [showAreaModal, setShowAreaModal] = useState(false);
   const [showFullHistory, setShowFullHistory] = useState(false);
   const [dbUsers, setDbUsers] = useState([]);
+  const [reportsData, setReportsData] = useState([]);
+  const [complianceByInstructor, setComplianceByInstructor] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getAllUsers()
-      .then(setDbUsers)
+    Promise.all([getAllUsers(), getReports()])
+      .then(([users, reports]) => {
+        setDbUsers(users || []);
+        setReportsData(reports || []);
+        setComplianceByInstructor(computeComplianceByInstructor(reports || []));
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
@@ -140,13 +155,63 @@ export default function ComplianceView() {
       if (!groups[areaName]) groups[areaName] = [];
       groups[areaName].push(u);
     });
-    return Object.entries(groups).map(([name, people], idx) => ({
-      name,
-      instructors: people.length,
-      value: null, // cumplimiento real: pendiente de definir fuente de datos
-      color: AREA_COLORS[idx % AREA_COLORS.length],
-      people: people.map(u => ({ name: u.name, value: u.compliance ?? null })),
-    }));
+    return Object.entries(groups).map(([name, people], idx) => {
+      const peopleWithCompliance = people.map(u => ({
+        name: u.name,
+        value: complianceByInstructor[u.name] ?? null,
+      }));
+      const withValue = peopleWithCompliance.filter(p => p.value !== null);
+      const areaAverage = withValue.length
+        ? Math.round(withValue.reduce((s, p) => s + p.value, 0) / withValue.length)
+        : null;
+      return {
+        name,
+        instructors: people.length,
+        value: areaAverage,
+        color: AREA_COLORS[idx % AREA_COLORS.length],
+        people: peopleWithCompliance,
+      };
+    });
+  })();
+
+  // Histórico mensual real: para cada mes (de todos los años que tengan
+  // informes reales), el % de instructores activos con al menos un
+  // informe 'Aprobado' ese mes (promediando GC y GF), ordenado del más
+  // reciente al más antiguo. Antes esto era un array vacío fijo ("aún no
+  // hay fuente de datos"); ahora se calcula igual que el resto del
+  // dashboard, a partir de los informes reales (GET /informe).
+  const monthly = (() => {
+    const activeInstructorNames = new Set(
+      dbUsers.filter(u => u.estado !== 'Pendiente' && u.role === 'instructor' && u.active !== false).map(u => u.name)
+    );
+    const totalActive = activeInstructorNames.size;
+    if (totalActive === 0) return [];
+
+    const now = new Date();
+    const byKey = {}; // "YYYY-MM" -> { gcApproved:Set, gfApproved:Set }
+    reportsData.forEach((r) => {
+      if (!activeInstructorNames.has(r.instructor)) return;
+      const parsed = parseReportMonthKey(r.month);
+      if (!parsed) return;
+      const key = `${parsed.year}-${parsed.idx}`;
+      if (!byKey[key]) byKey[key] = { year: parsed.year, idx: parsed.idx, gc: new Set(), gf: new Set() };
+      if (String(r.status || '').trim() === 'Aprobado') {
+        if (r.type === 'GC') byKey[key].gc.add(r.instructor);
+        else if (r.type === 'GF') byKey[key].gf.add(r.instructor);
+      }
+    });
+
+    return Object.values(byKey)
+      .sort((a, b) => (b.year - a.year) || (b.idx - a.idx)) // más reciente primero
+      .map((m) => {
+        const gcPct = (m.gc.size / totalActive) * 100;
+        const gfPct = (m.gf.size / totalActive) * 100;
+        return {
+          month: `${MONTH_NAMES_FULL[m.idx] || '—'} ${m.year}`,
+          value: Math.round((gcPct + gfPct) / 2),
+          current: m.year === now.getFullYear() && m.idx === now.getMonth(),
+        };
+      });
   })();
 
   const visibleMonths = showFullHistory ? monthly : monthly.slice(0, MONTHS_COLLAPSED);

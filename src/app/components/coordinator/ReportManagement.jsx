@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import Toast from '../Toast';
-import { getReports, updateReport } from '../../../services/reportsService';
+import { getReports, updateReport, downloadReportFile } from '../../../services/reportsService';
+import mammoth from 'mammoth';
 import { useTheme } from '../../../ThemeContext';
 import { addHistoryEntry } from './SharedViews.jsx';
 import jsPDF from 'jspdf';
@@ -463,7 +464,175 @@ function AnnotationLayer({ pageNum, annotations, activeTool, onCreate, onDelete 
   );
 }
 
-// ─── Visor de PDF simulado ───────────────────────────────────────────────────
+// ─── Visor de documento REAL ──────────────────────────────────────────────────
+// Reemplaza al antiguo "Visor de PDF simulado": en vez de dibujar una
+// plantilla inventada con los metadatos del informe, descarga el archivo
+// ORIGINAL que subió el instructor (GET /informe/:id/archivo, vía
+// downloadReportFile) y lo muestra tal cual:
+//   - PDF   -> se embebe con <iframe>, usando el visor nativo del navegador.
+//   - Word  -> se convierte a HTML con mammoth (misma librería que ya usa
+//              FilePreviewModal.jsx para la vista previa del instructor
+//              antes de subir el archivo).
+//   - Imagen -> se muestra directo.
+//   - Sin archivo original (informes antiguos, 404) -> se avisa claramente
+//     en vez de inventar contenido; en una pantalla donde el coordinador
+//     aprueba o rechaza, mostrar un documento fabricado sería engañoso.
+function RealDocumentViewer({ report, annotations, activeTool, onCreateAnnotation, onDeleteAnnotation }) {
+  const [state, setState] = useState({ loading: true, error: null, notFound: false, blobUrl: null, docxHtml: null, kind: null });
+
+  useEffect(() => {
+    let cancelled = false;
+    let localBlobUrl = null;
+    setState({ loading: true, error: null, notFound: false, blobUrl: null, docxHtml: null, kind: null });
+
+    (async () => {
+      try {
+        const blob = await downloadReportFile(report.id);
+        if (cancelled) return;
+
+        const name = report.fileName || '';
+        const isPdf = /\.pdf$/i.test(name) || blob.type === 'application/pdf';
+        const isDocx = /\.docx?$/i.test(name);
+        const isImage = /\.(jpe?g|png|gif|webp)$/i.test(name) || /^image\//.test(blob.type || '');
+
+        if (isDocx) {
+          const arrayBuffer = await blob.arrayBuffer();
+          const result = await mammoth.convertToHtml({ arrayBuffer });
+          if (cancelled) return;
+          setState({ loading: false, error: null, notFound: false, blobUrl: null, docxHtml: result.value, kind: 'docx' });
+        } else {
+          localBlobUrl = URL.createObjectURL(blob);
+          setState({
+            loading: false, error: null, notFound: false, docxHtml: null,
+            blobUrl: localBlobUrl, kind: isPdf ? 'pdf' : (isImage ? 'image' : 'other'),
+          });
+        }
+      } catch (err) {
+        if (cancelled) return;
+        if (err?.status === 404) {
+          setState({ loading: false, error: null, notFound: true, blobUrl: null, docxHtml: null, kind: null });
+        } else {
+          setState({ loading: false, error: err.message || 'No se pudo cargar el documento.', notFound: false, blobUrl: null, docxHtml: null, kind: null });
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (localBlobUrl) URL.revokeObjectURL(localBlobUrl);
+    };
+  }, [report.id, report.fileName]);
+
+  // Capa de marcado (resaltar/tachar/comentar) superpuesta al documento real.
+  // A diferencia del visor simulado anterior (que sabía exactamente cuántas
+  // "páginas" fabricadas tenía), aquí no conocemos la paginación real del
+  // PDF sin una librería de renderizado página por página (pdf.js). Por eso
+  // las marcas se ubican como porcentaje sobre todo el área visible del
+  // documento (equivalente a tratarlo como una sola página), en vez de por
+  // página exacta. Sigue siendo útil para señalar "aquí está el error" al
+  // instructor, solo que no se ancla a un número de página específico.
+  const withAnnotationOverlay = (children) => (
+    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 500 }}>
+      {children}
+      {activeTool !== undefined && (
+        <AnnotationLayer
+          pageNum={1}
+          annotations={annotations}
+          activeTool={activeTool}
+          onCreate={onCreateAnnotation}
+          onDelete={onDeleteAnnotation}
+        />
+      )}
+    </div>
+  );
+
+  const wrap = (children) => (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 16px', background: 'var(--viewer-chrome)', borderRadius: '10px 10px 0 0', flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <FileText size={16} color="#d1d5db" strokeWidth={2} />
+          <span style={{ fontSize: 12, color: '#d1d5db', fontWeight: 500, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {report.fileName}
+          </span>
+        </div>
+      </div>
+      <div style={{ flex: 1, minHeight: 0, background: 'var(--viewer-tray)', borderRadius: '0 0 10px 10px', overflow: 'auto' }}>
+        {children}
+      </div>
+    </div>
+  );
+
+  if (state.loading) {
+    return wrap(
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af', fontSize: 13 }}>
+        Cargando documento original…
+      </div>
+    );
+  }
+
+  if (state.notFound) {
+    return wrap(
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#d1d5db', fontSize: 13, textAlign: 'center', padding: 24, gap: 8 }}>
+        <FileText size={28} strokeWidth={1.5} />
+        <div>Este informe no tiene un archivo original guardado en el servidor.</div>
+        <div style={{ fontSize: 11.5, color: '#9ca3af' }}>Es probable que se haya creado antes de que existiera la carga de archivos, o que se haya cargado por un canal (como el chat) que aún no guarda el archivo. No es posible mostrar aquí un documento real.</div>
+      </div>
+    );
+  }
+
+  if (state.error) {
+    return wrap(
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#f87171', fontSize: 13, textAlign: 'center', padding: 24 }}>
+        {state.error}
+      </div>
+    );
+  }
+
+  if (state.kind === 'pdf' || state.kind === 'other') {
+    return wrap(
+      withAnnotationOverlay(
+        <iframe
+          src={state.blobUrl}
+          title={report.fileName}
+          style={{ width: '100%', height: '100%', border: 'none', minHeight: 500 }}
+        />
+      )
+    );
+  }
+
+  if (state.kind === 'image') {
+    return wrap(
+      withAnnotationOverlay(
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: 20 }}>
+          <img src={state.blobUrl} alt={report.fileName} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8 }} />
+        </div>
+      )
+    );
+  }
+
+  if (state.kind === 'docx') {
+    return wrap(
+      withAnnotationOverlay(
+        <div style={{ padding: '32px 28px' }}>
+          <div
+            style={{ background: '#fff', borderRadius: 10, padding: '36px 44px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', maxWidth: 760, margin: '0 auto', color: '#111827', fontSize: 14, lineHeight: 1.7 }}
+            dangerouslySetInnerHTML={{ __html: state.docxHtml }}
+          />
+        </div>
+      )
+    );
+  }
+
+  return null;
+}
+
+// ─── Visor de PDF simulado (LEGACY, ya no se usa) ─────────────────────────────
+// Se conserva solo como referencia histórica; ReviewModal ahora usa
+// RealDocumentViewer, que muestra el archivo real en vez de esta plantilla
+// fabricada con los metadatos del informe.
 function PdfViewer({ report, annotations, activeTool, onCreateAnnotation, onDeleteAnnotation }) {
   const pages = Array.from({ length: report.filePages }, (_, i) => i + 1);
 
@@ -727,10 +896,9 @@ function ReviewModal({ report, onClose, onApprove, onCorrect, onDownload }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexShrink: 0 }}>
                 <div style={{ background: 'var(--sena-orange-bg)', borderRadius: 8, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
                   <FileText size={15} strokeWidth={2.25} color="var(--sena-orange)" />
-                  <span style={{ fontWeight: 600, color: 'var(--sena-orange)' }}>PDF</span>
+                  <span style={{ fontWeight: 600, color: 'var(--sena-orange)' }}>{(report.fileName || '').split('.').pop()?.toUpperCase() || 'ARCHIVO'}</span>
                 </div>
                 <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>{report.fileName}</span>
-                <span style={{ fontSize: 12, color: 'var(--text-faint)', marginLeft: 'auto' }}>{report.filePages} páginas</span>
               </div>
 
               <AnnotationToolbar
@@ -742,7 +910,7 @@ function ReviewModal({ report, onClose, onApprove, onCorrect, onDownload }) {
               />
 
               <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', borderRadius: 10, border: '1px solid var(--border)' }}>
-                <PdfViewer
+                <RealDocumentViewer
                   report={report}
                   annotations={annotations}
                   activeTool={activeTool}
@@ -1051,18 +1219,30 @@ export default function ReportManagement() {
     localStorage.setItem('sena_notifications', JSON.stringify(saved));
   };
 
-  const handleDownload = (report) => {
-    const fileContent = `Reporte de ${report.instructor}\nTipo: ${report.type}\nPeriodo: ${report.month}\nEstado: ${report.status}\nFecha: ${report.date}\nNombre de archivo: ${report.fileName}`;
-    const blob = new Blob([fileContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = report.fileName || 'informe.pdf';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast(`Descargando ${report.fileName}...`);
+  // Descarga el archivo ORIGINAL (PDF/Word) que el instructor subió,
+  // exactamente como quedó guardado en el backend (GET /informe/:id/archivo).
+  // Antes esta función fabricaba un .txt con los metadatos del informe y lo
+  // renombraba con extensión .pdf — nunca era el documento real, y además
+  // el archivo resultante ni siquiera se podía abrir como PDF de verdad.
+  const handleDownload = async (report) => {
+    try {
+      const blob = await downloadReportFile(report.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = report.fileName || 'informe.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(`Descargando ${report.fileName}...`);
+    } catch (err) {
+      if (err?.status === 404) {
+        showToast('Este informe no tiene un archivo original guardado en el servidor.', '#D2A22E');
+        return;
+      }
+      showToast(err.message || 'Error al descargar el archivo', '#ef4444');
+    }
   };
 
   const handleApprove = async (id, note, notifType) => {

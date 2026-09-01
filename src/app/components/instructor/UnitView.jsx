@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, Component } from 'react';
 import { useTheme } from '../../../ThemeContext';
-import { getReports, deleteReport, getReportTraceability } from '../../../services/reportsService';
+import { getReports, deleteReport, getReportTraceability, downloadReportFile } from '../../../services/reportsService';
 import jsPDF from 'jspdf';
 
 const sena     = '#39A900';
@@ -879,13 +879,40 @@ export default function UnitView({ userName }) {
     doc.save(`${(report.fileName || report.name || 'informe').replace(/\.[^.]+$/, '')}_corregido.pdf`);
   };
 
-  const handleDownload = (r) => {
+  // Descarga el archivo ORIGINAL (PDF/Word) que el instructor subió al
+  // crear el informe, tal cual quedó guardado en el backend
+  // (GET /informe/:id/archivo). Si ese informe no tiene un archivo real
+  // asociado (por ejemplo, informes antiguos creados antes de que
+  // existiera esta funcionalidad), el backend responde 404 y aquí
+  // recurrimos como respaldo a generar el PDF recreado con los datos del
+  // formulario (generateAnnotatedPdf), dejando claro que es una
+  // reconstrucción y no el archivo original.
+  const handleDownload = async (r) => {
     showToast(`✓ Descargando "${r.fileName || r.name}"...`);
     try {
-      generateAnnotatedPdf(r);
+      const blob = await downloadReportFile(r.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = r.fileName || r.name || 'informe.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch (err) {
+      // 404: este informe no tiene archivo original guardado en el backend.
+      if (err?.response?.status === 404 || err?.status === 404) {
+        showToast('No hay archivo original para este informe; generando versión reconstruida...', '#D2A22E');
+        try {
+          generateAnnotatedPdf(r);
+        } catch (genErr) {
+          console.error(genErr);
+          showToast('Error al generar el PDF', '#ef4444');
+        }
+        return;
+      }
       console.error(err);
-      showToast('Error al generar el PDF', '#ef4444');
+      showToast('Error al descargar el archivo', '#ef4444');
     }
   };
 

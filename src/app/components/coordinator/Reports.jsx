@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTheme } from '../../../ThemeContext';
 import { getAllUsers } from '../../../services/authService';
+import { getReports, computeComplianceByInstructor } from '../../../services/reportsService';
 
 /* ------------------------------------------------------------------ */
 /*  PALETA INSTITUCIONAL SENA                                          */
@@ -135,6 +136,15 @@ const AREA_COLORS = [SENA.verde, SENA.naranja, '#22C55E', '#EA580C', '#65A30D', 
 
 function initialsOf(name = '') {
   return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+}
+
+// Interpreta el campo `month` de un informe real (formato "MM/YYYY", el
+// mismo que usa el panel del instructor) para poder ubicar cada informe
+// en el mes/año correcto del gráfico.
+function parseReportMonthKey(monthStr) {
+  const m = String(monthStr || '').match(/^(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+  return { idx: parseInt(m[1], 10) - 1, year: parseInt(m[2], 10) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -339,6 +349,18 @@ export default function Reports() {
   const { colors: c } = useTheme();
 
   const [dbUsers, setDbUsers] = useState([]);
+  // Cumplimiento real calculado a partir de los informes de cada instructor
+  // (GET /informe), no del campo `compliance` del usuario — ese campo NO
+  // existe en el backend (la tabla `usuario` no lo tiene), así que siempre
+  // llegaba undefined y por eso el dashboard mostraba "—" en todo aunque
+  // ya hubiera informes cargados y aprobados.
+  const [complianceByInstructor, setComplianceByInstructor] = useState({});
+  // Informes reales (GET /informe), para poder calcular el cumplimiento
+  // mes a mes del gráfico "Cumplimiento Mensual" — antes ese gráfico solo
+  // rellenaba el mes en curso con el promedio anual y dejaba los demás
+  // meses vacíos para siempre, sin importar si ya había informes
+  // aprobados en meses anteriores.
+  const [reportsData, setReportsData] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [year, setYear] = useState(YEARS[0]);
@@ -348,8 +370,10 @@ export default function Reports() {
   useEffect(() => {
     (async () => {
       try {
-        const data = await getAllUsers();
-        setDbUsers(data || []);
+        const [users, reports] = await Promise.all([getAllUsers(), getReports()]);
+        setDbUsers(users || []);
+        setReportsData(reports || []);
+        setComplianceByInstructor(computeComplianceByInstructor(reports || []));
       } catch (err) {
         console.error(err);
       } finally {
@@ -368,27 +392,46 @@ export default function Reports() {
       .map(u => ({
         name: u.name,
         area: u.area || 'Sin asignar',
-        compliance: u.compliance ?? null,
+        compliance: complianceByInstructor[u.name] ?? null,
         active: u.active,
       }))
-  ), [dbUsers]);
+  ), [dbUsers, complianceByInstructor]);
 
-  // Construye AREA_DATA en tiempo real a partir de los instructores reales.
-  // Como el backend aún no expone un histórico mensual de Gestión
-  // Contractual (GC) / Gestión Financiera (GF), el cumplimiento actual de
-  // cada instructor se registra en el mes en curso; los demás meses
-  // quedan sin datos hasta que existan informes históricos.
+  // Construye AREA_DATA en tiempo real a partir de los instructores y los
+  // informes reales. El cumplimiento mensual (gráfico "Cumplimiento
+  // Mensual") ya no se limita al mes en curso: para cada mes del año
+  // seleccionado se calcula el % real de instructores del área con un
+  // informe 'Aprobado' de cada tipo (GC/GF) ese mes concreto. Un mes sin
+  // ningún informe registrado en el área queda en `null` (se ve como
+  // guion en el gráfico), para no confundir "sin datos" con "0% real".
   const areaData = useMemo(() => {
     const data = {};
     AREAS.forEach((a, idx) => {
       const inArea = instructorsList.filter(i => i.area === a && i.active !== false);
       const withCompliance = inArea.filter(i => i.compliance !== null);
-      const avgCompliance = withCompliance.length
-        ? round(withCompliance.reduce((s, i) => s + i.compliance, 0) / withCompliance.length)
-        : null;
+      const namesInArea = new Set(inArea.map(i => i.name));
 
       const monthly = Array(12).fill(null);
-      if (avgCompliance !== null) monthly[CURRENT_MONTH_INDEX] = { gc: avgCompliance, gf: avgCompliance };
+      if (inArea.length > 0) {
+        for (let m = 0; m < 12; m++) {
+          let gcApproved = 0, gfApproved = 0, anyReportThisMonth = false;
+          reportsData.forEach((r) => {
+            if (!namesInArea.has(r.instructor)) return;
+            const parsed = parseReportMonthKey(r.month);
+            if (!parsed || parsed.year !== Number(year) || parsed.idx !== m) return;
+            anyReportThisMonth = true;
+            if (String(r.status || '').trim() !== 'Aprobado') return;
+            if (r.type === 'GC') gcApproved += 1;
+            else if (r.type === 'GF') gfApproved += 1;
+          });
+          if (anyReportThisMonth) {
+            monthly[m] = {
+              gc: round((gcApproved / inArea.length) * 100),
+              gf: round((gfApproved / inArea.length) * 100),
+            };
+          }
+        }
+      }
 
       const color = AREA_COLORS[idx % AREA_COLORS.length];
 
@@ -405,7 +448,7 @@ export default function Reports() {
       };
     });
     return data;
-  }, [instructorsList]);
+  }, [instructorsList, reportsData, year]);
 
   const yearHasData = !loading && year === CURRENT_YEAR && instructorsList.length > 0;
 
