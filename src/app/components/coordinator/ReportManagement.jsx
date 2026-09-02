@@ -798,7 +798,6 @@ function PdfViewer({ report, annotations, activeTool, onCreateAnnotation, onDele
 
 // ─── Modal de revisión con visor ─────────────────────────────────────────────
 const NOTIFICATION_TYPES = [
-  { value: 'revision',    label: 'Revisión de Documento',  Icon: ClipboardList, color: 'var(--sena-blue)', bg: 'var(--sena-blue-bg)' },
   { value: 'faltante',    label: 'Documento Faltante',      Icon: FolderOpen,    color: 'var(--sena-gold)', bg: 'var(--sena-gold-bg)' },
   { value: 'correccion',  label: 'Corrección Necesaria',    Icon: Pencil,        color: 'var(--sena-orange)', bg: 'var(--sena-orange-bg)' },
   { value: 'recordatorio',label: 'Recordatorio',            Icon: Bell,          color: 'var(--sena-green)', bg: 'var(--sena-green-bg)' },
@@ -812,6 +811,12 @@ function ReviewModal({ report, onClose, onApprove, onCorrect, onDownload }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [annotations, setAnnotations] = useState([]);
   const [activeTool, setActiveTool] = useState(null);
+  // Imagen adjunta a la observación (evidencia adicional del error, ej. un
+  // pantallazo). Se guarda como data URL en memoria: solo vive mientras el
+  // modal está abierto, se muestra en la vista previa y se referencia por
+  // nombre en la observación al aprobar/pedir corrección.
+  const [attachedImage, setAttachedImage] = useState(null); // { name, dataUrl }
+  const imageInputRef = useRef(null);
 
   // Cada vez que se abre un informe distinto, se limpian las marcas del
   // documento anterior.
@@ -820,6 +825,7 @@ function ReviewModal({ report, onClose, onApprove, onCorrect, onDownload }) {
     setActiveTool(null);
     setNote('');
     setNotifType('');
+    setAttachedImage(null);
   }, [report?.id]);
 
   if (!report) return null;
@@ -832,6 +838,25 @@ function ReviewModal({ report, onClose, onApprove, onCorrect, onDownload }) {
   const deleteAnnotation = (id) => setAnnotations(prev => prev.filter(a => a.id !== id));
   const undoAnnotation = () => setAnnotations(prev => prev.slice(0, -1));
   const clearAnnotations = () => setAnnotations([]);
+
+  const handleImageChange = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // permite volver a elegir el mismo archivo después de quitarlo
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => setAttachedImage({ name: file.name, dataUrl: reader.result });
+    reader.readAsDataURL(file);
+  };
+  const removeAttachedImage = () => setAttachedImage(null);
+
+  // Antepone la referencia de la imagen adjunta (si hay) a la observación
+  // escrita, tanto para Aprobar como para Solicitar Corrección.
+  const buildNoteWithImage = () => {
+    if (!attachedImage) return note;
+    const imgRef = `📎 Imagen adjunta: ${attachedImage.name}`;
+    return note ? `${note}\n\n${imgRef}` : imgRef;
+  };
 
   return (
     <div style={{
@@ -1028,7 +1053,7 @@ function ReviewModal({ report, onClose, onApprove, onCorrect, onDownload }) {
               {/* Campo observaciones */}
               <div>
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                  Observaciones {report.status === 'A Corregir' ? '(requeridas para corrección)' : '(opcional)'}
+                  Observaciones {report.status === 'A Corregir' ? '(requeridas para corrección)' : ''}
                 </label>
                 <textarea
                   value={note}
@@ -1042,19 +1067,65 @@ function ReviewModal({ report, onClose, onApprove, onCorrect, onDownload }) {
                   }}
                 />
                 <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 4, textAlign: 'right' }}>{note.length} caracteres</div>
+
+                {/* Adjuntar imagen a la observación */}
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  style={{ display: 'none' }}
+                />
+                {!attachedImage ? (
+                  <button
+                    type="button"
+                    onClick={() => imageInputRef.current?.click()}
+                    style={{
+                      marginTop: 8, padding: '7px 12px', borderRadius: 8,
+                      border: '1px dashed var(--border)', background: 'var(--surface-alt)',
+                      color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: 6,
+                    }}
+                  >
+                    <Paperclip size={13} strokeWidth={2.25} /> Adjuntar imagen
+                  </button>
+                ) : (
+                  <div style={{
+                    marginTop: 8, display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '8px 10px', borderRadius: 10, border: '1px solid var(--border)',
+                    background: 'var(--surface-alt)',
+                  }}>
+                    <img
+                      src={attachedImage.dataUrl}
+                      alt={attachedImage.name}
+                      style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border)' }}
+                    />
+                    <span style={{ flex: 1, fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {attachedImage.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={removeAttachedImage}
+                      title="Quitar imagen"
+                      style={{ border: 'none', background: 'none', color: 'var(--text-faint)', cursor: 'pointer', flexShrink: 0, display: 'flex' }}
+                    >
+                      <X size={15} strokeWidth={2.25} />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Acciones */}
               {report.status !== 'Aprobado' && (
                 <div className="coord-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <button onClick={() => onCorrect(report.id, note, notifType, annotations)} style={{
+                  <button onClick={() => onCorrect(report.id, buildNoteWithImage(), notifType, annotations)} style={{
                     padding: '12px', borderRadius: 10, border: 'none',
                     background: 'var(--sena-orange-bg)', color: 'var(--sena-orange)', fontWeight: 700, fontSize: 13, cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
                   }}>
                     <Pencil size={15} strokeWidth={2.25} /> Solicitar Corrección
                   </button>
-                  <button onClick={() => onApprove(report.id, note, notifType)} style={{
+                  <button onClick={() => onApprove(report.id, buildNoteWithImage(), notifType)} style={{
                     padding: '12px', borderRadius: 10, border: 'none',
                     background: 'linear-gradient(135deg, var(--sena-green-solid), var(--sena-green-strong))', color: '#fff',
                     fontWeight: 700, fontSize: 13, cursor: 'pointer',
@@ -1250,13 +1321,13 @@ export default function ReportManagement() {
       await updateReport(id, {
         status: 'Aprobado',
         observacion: note || 'Aprobado sin observaciones',
-        tipo_notificacion: notifType || 'revision'
+        tipo_notificacion: notifType || 'general'
       });
       setReports(prev => prev.map(r => r.id === id ? {
         ...r,
         status: 'Aprobado',
         observacion: note || 'Aprobado sin observaciones',
-        tipo_notificacion: notifType || 'revision',
+        tipo_notificacion: notifType || 'general',
         color: 'var(--sena-green)',
         bg: 'var(--sena-green-bg)'
       } : r));
