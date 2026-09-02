@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import CoordinatorDashboard from './app/components/coordinator/CoordinatorDashboard';
 import InstructorDashboard from './app/components/instructor/InstructorDashboard';
 import LoginScreen from './app/components/LoginScreen';
+import WhatsAppFloatingButton from './app/components/WhatsAppFloatingButton';
 import { ThemeProvider } from './ThemeContext';
 import './App.css';
 
@@ -91,18 +92,21 @@ function App() {
   return (
     <ThemeProvider>
       {user ? (
-        user.role === 'instructor' ? (
-          <InstructorDashboard user={user} onLogout={handleLogout} />
-        ) : (
-          <CoordinatorDashboard
-            user={user}
-            onLogout={handleLogout}
-            pendingUsers={pendingUsers}
-            setPendingUsers={setPendingUsers}
-            notifications={notifications}
-            setNotifications={setNotifications}
-          />
-        )
+        <>
+          {user.role === 'instructor' ? (
+            <InstructorDashboard user={user} onLogout={handleLogout} />
+          ) : (
+            <CoordinatorDashboard
+              user={user}
+              onLogout={handleLogout}
+              pendingUsers={pendingUsers}
+              setPendingUsers={setPendingUsers}
+              notifications={notifications}
+              setNotifications={setNotifications}
+            />
+          )}
+          <WhatsAppFloatingButton />
+        </>
       ) : (
         <LoginScreen onLogin={handleLogin} />
       )}
