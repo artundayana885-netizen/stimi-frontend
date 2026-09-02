@@ -1187,7 +1187,7 @@ function ReportRow({ r, onDownload, onOpen }) {
         )}
         {r.status === 'A Corregir' && (
           <button onClick={() => onOpen(r)} style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: 'var(--sena-orange-solid)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <Pencil size={13} strokeWidth={2.25} /> Ver Corrección
+            <Pencil size={13} strokeWidth={2.25} /> Revisar
           </button>
         )}
         {r.status === 'Aprobado' && (

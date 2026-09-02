@@ -70,6 +70,7 @@ function mapInforme(raw) {
     fileName: raw.fileName || `Informe_${type}_${raw.id_informe}.pdf`,
     observacion: raw.observacion || '',
     tipo_notificacion: raw.tipo_notificacion || '',
+    marcas: Array.isArray(raw.marcas) ? raw.marcas : [],
 
     // ── Campos decorativos, no existen en el backend ──
     initials: initialsFromName(raw.instructor),
@@ -96,16 +97,17 @@ export async function getReports() {
  * @param {{status?: string, observacion?: string, tipo_notificacion?: string, marcas?: Array}} payload
  * @returns {Promise<Object>} informe actualizado, ya mapeado
  *
- * Nota: `marcas` (las anotaciones hechas sobre el PDF en el visor) NO tiene
- * columna propia en el backend. El resumen de esas marcas ya se incluye como
- * texto dentro de `observacion` desde ReportManagement.jsx (handleCorrect),
- * así que aquí simplemente no se envía el arreglo crudo al backend.
+ * `marcas` (las anotaciones hechas sobre el PDF en el visor: resaltados,
+ * tachones y comentarios) SÍ tiene columna propia en el backend
+ * (`marcas`, tipo simple-json) — se guarda tal cual para que el instructor
+ * las vea superpuestas en el mismo lugar donde el coordinador las dejó.
  */
 export async function updateReport(id, payload = {}) {
   const body = {};
   if (payload.status !== undefined) body.status = payload.status;
   if (payload.observacion !== undefined) body.observacion = payload.observacion;
   if (payload.tipo_notificacion !== undefined) body.tipo_notificacion = payload.tipo_notificacion;
+  if (payload.marcas !== undefined) body.marcas = payload.marcas;
 
   const { data } = await apiClient.patch(`/informe/${id}`, body);
   return mapInforme(data);
