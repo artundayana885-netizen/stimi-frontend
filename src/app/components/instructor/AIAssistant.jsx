@@ -512,6 +512,13 @@ export default function AIAssistant({ role = 'coordinador', userId = 'default' }
 
   const handleSend = useCallback(
     async (overrideText) => {
+      // Guard: si ya hay una petición en curso (mensaje o archivo enviándose
+      // a n8n), ignoramos cualquier intento adicional de envío hasta que
+      // termine. Evita disparar múltiples fetch en paralelo al mismo
+      // webhook por Enter repetido, doble clic, o click rápido en un
+      // quick prompt.
+      if (busy) return;
+
       const textToSend = (overrideText ?? inputText).trim();
       const fileToSend = pendingFile;
       if (!textToSend && !fileToSend) return;
@@ -661,7 +668,7 @@ export default function AIAssistant({ role = 'coordinador', userId = 'default' }
         setBusy(false);
       }
     },
-    [inputText, pendingFile, activeId, updateMessage, envUrl, role]
+    [busy, inputText, pendingFile, activeId, updateMessage, envUrl, role]
   );
 
   const onComposerKeyDown = (e) => {
