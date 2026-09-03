@@ -926,14 +926,6 @@ function ReviewModal({ report, onClose, onApprove, onCorrect, onDownload }) {
                 <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>{report.fileName}</span>
               </div>
 
-              <AnnotationToolbar
-                activeTool={activeTool}
-                setActiveTool={setActiveTool}
-                count={annotations.length}
-                onUndo={undoAnnotation}
-                onClear={clearAnnotations}
-              />
-
               <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', borderRadius: 10, border: '1px solid var(--border)' }}>
                 <RealDocumentViewer
                   report={report}
@@ -957,33 +949,6 @@ function ReviewModal({ report, onClose, onApprove, onCorrect, onDownload }) {
                   <span><strong>Estado:</strong> {report.status}</span>
                 </div>
               </div>
-
-              {/* ── Marcas hechas sobre el documento ── */}
-              {annotations.length > 0 && (
-                <div style={{ background: 'var(--surface-alt)', borderRadius: 12, padding: '14px 16px', border: '1px solid var(--border)' }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-primary)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 7 }}>
-                    <Highlighter size={14} strokeWidth={2.25} /> Marcas en el documento ({annotations.length})
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {annotations.map((a, i) => (
-                      <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12.5, color: 'var(--text-secondary)' }}>
-                        <span style={{
-                          width: 18, height: 18, borderRadius: '50%', flexShrink: 0, marginTop: 1,
-                          background: a.type === 'pin' ? '#00304D' : a.type === 'strike' ? '#FC7323' : '#DDB400',
-                          color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}>{i + 1}</span>
-                        <span style={{ flex: 1 }}>Página {a.page} — {annotationLabel(a)}</span>
-                        <button type="button" onClick={() => deleteAnnotation(a.id)} title="Eliminar marca" style={{ border: 'none', background: 'none', color: 'var(--text-faint)', cursor: 'pointer', flexShrink: 0 }}>
-                          <X size={13} strokeWidth={2.25} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 8 }}>
-                    Estas marcas se incluirán automáticamente en la observación al solicitar la corrección.
-                  </div>
-                </div>
-              )}
 
               {/* ── Tipo de Notificación ── */}
               <div>
