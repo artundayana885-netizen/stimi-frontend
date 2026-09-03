@@ -185,12 +185,11 @@ export default function ReportFolders({ onOpenReport, refreshKey }) {
     }
   };
 
-  // Solo se puede eliminar mientras el informe sigue Pendiente (aún no lo
-  // revisó el coordinador). Al eliminarlo aquí, también desaparece del
-  // panel del coordinador porque ambos leen la misma tabla `informe` del
-  // backend — no hace falta ningún paso adicional.
+  // Se puede eliminar en cualquier estado (Pendiente, Aprobado o A
+  // Corregir). Al eliminarlo aquí, también desaparece del panel del
+  // coordinador porque ambos leen la misma tabla `informe` del backend —
+  // no hace falta ningún paso adicional.
   const handleDelete = async (report) => {
-    if (report.status !== 'Pendiente') return;
     const ok = window.confirm(`¿Eliminar el informe ${report.type} de ${report.date}? Esta acción no se puede deshacer.`);
     if (!ok) return;
 
@@ -429,16 +428,14 @@ export default function ReportFolders({ onOpenReport, refreshKey }) {
                       >
                         <IconDownload />
                       </button>
-                      {r.status === 'Pendiente' && (
-                        <button
-                          onClick={() => handleDelete(r)}
-                          disabled={busyId === r.id}
-                          title="Eliminar"
-                          style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: '#ef4444', background: theme === 'dark' ? 'rgba(239,68,68,0.12)' : '#FEF2F2', border: '1.5px solid #FECACA', borderRadius: 8, padding: '7px 10px', cursor: busyId === r.id ? 'default' : 'pointer', opacity: busyId === r.id ? 0.6 : 1 }}
-                        >
-                          <IconTrash />
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleDelete(r)}
+                        disabled={busyId === r.id}
+                        title="Eliminar"
+                        style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: '#ef4444', background: theme === 'dark' ? 'rgba(239,68,68,0.12)' : '#FEF2F2', border: '1.5px solid #FECACA', borderRadius: 8, padding: '7px 10px', cursor: busyId === r.id ? 'default' : 'pointer', opacity: busyId === r.id ? 0.6 : 1 }}
+                      >
+                        <IconTrash />
+                      </button>
                     </div>
                   </div>
                 );
