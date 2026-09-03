@@ -1300,18 +1300,24 @@ export default function ReportManagement() {
 
   const handleApprove = async (id, note, notifType, attachedImage) => {
     try {
+      // NOTA: se removió el envío de `imagenObservacion` aquí. Mandar la
+      // imagen como base64 dentro del mismo PATCH que aprueba el informe
+      // causaba "request entity too large" en el backend y tumbaba TODA
+      // la petición (incluida la aprobación en sí). La forma correcta es
+      // subir la imagen como archivo real a un endpoint aparte (como ya
+      // hace revisarGc con multipart/form-data) y aquí solo guardar la
+      // URL resultante, que sí es liviana. Hasta que exista ese endpoint,
+      // no se persiste ninguna imagen.
       await updateReport(id, {
         status: 'Aprobado',
         observacion: note || 'Aprobado sin observaciones',
         tipo_notificacion: notifType || 'general',
-        imagenObservacion: attachedImage || null,
       });
       setReports(prev => prev.map(r => r.id === id ? {
         ...r,
         status: 'Aprobado',
         observacion: note || 'Aprobado sin observaciones',
         tipo_notificacion: notifType || 'general',
-        imagenObservacion: attachedImage || null,
         color: 'var(--sena-green)',
         bg: 'var(--sena-green-bg)'
       } : r));
@@ -1354,12 +1360,16 @@ export default function ReportManagement() {
       const baseNote = note || 'Solicitud de corrección sin observaciones detalladas.';
       const fullObservacion = baseNote + marksSummary;
 
+      // NOTA: se removió `imagenObservacion` del body — enviar la imagen en
+      // base64 dentro de este mismo PATCH era lo que causaba "request
+      // entity too large" y tumbaba toda la solicitud de corrección, con o
+      // sin imagen adjunta. Queda pendiente moverlo a un endpoint de
+      // subida de archivo real (multipart), igual que revisarGc.
       await updateReport(id, {
         status: 'A Corregir',
         observacion: fullObservacion,
         tipo_notificacion: notifType || 'correccion',
         marcas: marks,
-        imagenObservacion: attachedImage || null,
       });
       setReports(prev => prev.map(r => r.id === id ? {
         ...r,
@@ -1367,7 +1377,6 @@ export default function ReportManagement() {
         observacion: fullObservacion,
         tipo_notificacion: notifType || 'correccion',
         marcas: marks,
-        imagenObservacion: attachedImage || null,
         color: 'var(--sena-orange)',
         bg: 'var(--sena-orange-bg)'
       } : r));
