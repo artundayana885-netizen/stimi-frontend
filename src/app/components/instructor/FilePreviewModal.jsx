@@ -89,10 +89,22 @@ export default function FilePreviewModal({ file, fileUrl, onClose }) {
                 <div style={{ textAlign: 'center', color: '#ef4444', fontSize: 13, padding: 40 }}>{error}</div>
               )}
               {!loading && !error && docxHtml && (
-                <div
-                  style={{ background: '#fff', borderRadius: 10, padding: '36px 44px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', maxWidth: 760, margin: '0 auto', color: '#111827', fontSize: 14, lineHeight: 1.7 }}
-                  dangerouslySetInnerHTML={{ __html: docxHtml }}
-                />
+                <>
+                  <style>{`
+                    .docx-render-content table { width: 100%; border-collapse: collapse; margin: 14px 0; table-layout: fixed; }
+                    .docx-render-content table td, .docx-render-content table th { border: 1px solid #E5E7EB; padding: 8px 10px; text-align: left; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }
+                    .docx-render-content table th { background: #F7F9FC; font-weight: 700; }
+                    .docx-render-content img { max-width: 100%; height: auto; }
+                    .docx-render-content p { margin: 0 0 10px; }
+                    .docx-render-content h1, .docx-render-content h2, .docx-render-content h3 { margin: 18px 0 8px; }
+                    .docx-render-content ul, .docx-render-content ol { padding-left: 22px; margin: 0 0 10px; }
+                  `}</style>
+                  <div
+                    className="docx-render-content"
+                    style={{ background: '#fff', borderRadius: 10, padding: '36px 44px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', maxWidth: 760, margin: '0 auto', color: '#111827', fontSize: 14, lineHeight: 1.7 }}
+                    dangerouslySetInnerHTML={{ __html: docxHtml }}
+                  />
+                </>
               )}
             </div>
           )}

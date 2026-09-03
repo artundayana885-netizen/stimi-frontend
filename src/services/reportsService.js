@@ -71,6 +71,11 @@ function mapInforme(raw) {
     observacion: raw.observacion || '',
     tipo_notificacion: raw.tipo_notificacion || '',
     marcas: Array.isArray(raw.marcas) ? raw.marcas : [],
+    // Imagen (pantallazo/evidencia) que el coordinador adjuntó junto con la
+    // observación al aprobar o pedir corrección. Viene del backend como
+    // `imagen_observacion` (snake_case, igual que tipo_notificacion) y se
+    // guarda como { name, dataUrl } o null si no se adjuntó ninguna.
+    imagenObservacion: raw.imagen_observacion || null,
 
     // ── Campos decorativos, no existen en el backend ──
     initials: initialsFromName(raw.instructor),
@@ -108,6 +113,7 @@ export async function updateReport(id, payload = {}) {
   if (payload.observacion !== undefined) body.observacion = payload.observacion;
   if (payload.tipo_notificacion !== undefined) body.tipo_notificacion = payload.tipo_notificacion;
   if (payload.marcas !== undefined) body.marcas = payload.marcas;
+  if (payload.imagenObservacion !== undefined) body.imagen_observacion = payload.imagenObservacion;
 
   const { data } = await apiClient.patch(`/informe/${id}`, body);
   return mapInforme(data);

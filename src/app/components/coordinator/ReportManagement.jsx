@@ -617,7 +617,24 @@ function RealDocumentViewer({ report, annotations, activeTool, onCreateAnnotatio
     return wrap(
       withAnnotationOverlay(
         <div style={{ padding: '32px 28px' }}>
+          {/* mammoth convierte el .docx a HTML "en crudo": conserva las
+              tablas, encabezados y listas del documento original, pero sin
+              ningún CSS. Sin estas reglas, las tablas del informe (ej. la
+              tabla de actividades/evidencias) se renderizan con el layout
+              automático del navegador — celdas sin borde que se encogen al
+              contenido — y el texto se ve descuadrado en vez de como una
+              tabla real. */}
+          <style>{`
+            .docx-render-content table { width: 100%; border-collapse: collapse; margin: 14px 0; table-layout: fixed; }
+            .docx-render-content table td, .docx-render-content table th { border: 1px solid #E5E7EB; padding: 8px 10px; text-align: left; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }
+            .docx-render-content table th { background: #F7F9FC; font-weight: 700; }
+            .docx-render-content img { max-width: 100%; height: auto; }
+            .docx-render-content p { margin: 0 0 10px; }
+            .docx-render-content h1, .docx-render-content h2, .docx-render-content h3 { margin: 18px 0 8px; }
+            .docx-render-content ul, .docx-render-content ol { padding-left: 22px; margin: 0 0 10px; }
+          `}</style>
           <div
+            className="docx-render-content"
             style={{ background: '#fff', borderRadius: 10, padding: '36px 44px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', maxWidth: 760, margin: '0 auto', color: '#111827', fontSize: 14, lineHeight: 1.7 }}
             dangerouslySetInnerHTML={{ __html: state.docxHtml }}
           />
@@ -1083,14 +1100,14 @@ function ReviewModal({ report, onClose, onApprove, onCorrect, onDownload }) {
               {/* Acciones */}
               {report.status !== 'Aprobado' && (
                 <div className="coord-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <button onClick={() => onCorrect(report.id, buildNoteWithImage(), notifType, annotations)} style={{
+                  <button onClick={() => onCorrect(report.id, buildNoteWithImage(), notifType, annotations, attachedImage)} style={{
                     padding: '12px', borderRadius: 10, border: 'none',
                     background: 'var(--sena-orange-bg)', color: 'var(--sena-orange)', fontWeight: 700, fontSize: 13, cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
                   }}>
                     <Pencil size={15} strokeWidth={2.25} /> Solicitar Corrección
                   </button>
-                  <button onClick={() => onApprove(report.id, buildNoteWithImage(), notifType)} style={{
+                  <button onClick={() => onApprove(report.id, buildNoteWithImage(), notifType, attachedImage)} style={{
                     padding: '12px', borderRadius: 10, border: 'none',
                     background: 'linear-gradient(135deg, var(--sena-green-solid), var(--sena-green-strong))', color: '#fff',
                     fontWeight: 700, fontSize: 13, cursor: 'pointer',
@@ -1281,18 +1298,20 @@ export default function ReportManagement() {
     }
   };
 
-  const handleApprove = async (id, note, notifType) => {
+  const handleApprove = async (id, note, notifType, attachedImage) => {
     try {
       await updateReport(id, {
         status: 'Aprobado',
         observacion: note || 'Aprobado sin observaciones',
-        tipo_notificacion: notifType || 'general'
+        tipo_notificacion: notifType || 'general',
+        imagenObservacion: attachedImage || null,
       });
       setReports(prev => prev.map(r => r.id === id ? {
         ...r,
         status: 'Aprobado',
         observacion: note || 'Aprobado sin observaciones',
         tipo_notificacion: notifType || 'general',
+        imagenObservacion: attachedImage || null,
         color: 'var(--sena-green)',
         bg: 'var(--sena-green-bg)'
       } : r));
@@ -1325,7 +1344,7 @@ export default function ReportManagement() {
   // y comentarios/pin) que el coordinador dejó en el visor. Se resumen y se
   // agregan automáticamente a la observación para que el instructor sepa
   // exactamente dónde está el error.
-  const handleCorrect = async (id, note, notifType, marks = []) => {
+  const handleCorrect = async (id, note, notifType, marks = [], attachedImage) => {
     try {
       const marksSummary = marks.length > 0
         ? '\n\nMarcas señaladas en el documento:\n' + marks
@@ -1340,6 +1359,7 @@ export default function ReportManagement() {
         observacion: fullObservacion,
         tipo_notificacion: notifType || 'correccion',
         marcas: marks,
+        imagenObservacion: attachedImage || null,
       });
       setReports(prev => prev.map(r => r.id === id ? {
         ...r,
@@ -1347,6 +1367,7 @@ export default function ReportManagement() {
         observacion: fullObservacion,
         tipo_notificacion: notifType || 'correccion',
         marcas: marks,
+        imagenObservacion: attachedImage || null,
         color: 'var(--sena-orange)',
         bg: 'var(--sena-orange-bg)'
       } : r));

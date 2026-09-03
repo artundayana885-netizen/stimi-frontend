@@ -493,7 +493,17 @@ function ReadOnlyDocumentViewer({ report }) {
   return wrap(
     withMarksOverlay(
       <div style={{ padding: '32px 28px' }}>
+        <style>{`
+          .docx-render-content table { width: 100%; border-collapse: collapse; margin: 14px 0; table-layout: fixed; }
+          .docx-render-content table td, .docx-render-content table th { border: 1px solid #E5E7EB; padding: 8px 10px; text-align: left; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }
+          .docx-render-content table th { background: #F7F9FC; font-weight: 700; }
+          .docx-render-content img { max-width: 100%; height: auto; }
+          .docx-render-content p { margin: 0 0 10px; }
+          .docx-render-content h1, .docx-render-content h2, .docx-render-content h3 { margin: 18px 0 8px; }
+          .docx-render-content ul, .docx-render-content ol { padding-left: 22px; margin: 0 0 10px; }
+        `}</style>
         <div
+          className="docx-render-content"
           style={{ background: '#fff', borderRadius: 10, padding: '36px 44px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', maxWidth: 760, margin: '0 auto', color: '#111827', fontSize: 14, lineHeight: 1.7 }}
           dangerouslySetInnerHTML={{ __html: state.docxHtml }}
         />
@@ -730,6 +740,9 @@ export default function UnitView({ userName }) {
       instructor: r.instructor,
       rawDate: r.date,
       marcas,
+      // Imagen (pantallazo/evidencia) que el coordinador adjuntó al
+      // aprobar o pedir corrección. { name, dataUrl } o null.
+      imagenObservacion: r.imagenObservacion || null,
       filePages,
       previewContent: defaultPreviewContent(r),
     };
@@ -1166,6 +1179,24 @@ export default function UnitView({ userName }) {
                       : (baseObservationText(selectedReport.observacion || reportObservation) || selectedReport.comments)}
                   </div>
                 </div>
+
+                {selectedReport.imagenObservacion && (
+                  <div style={{ marginBottom: 22 }}>
+                    <div style={{ ...eyebrow, marginBottom: 7 }}>Imagen adjunta por el coordinador</div>
+                    <a
+                      href={selectedReport.imagenObservacion.dataUrl}
+                      download={selectedReport.imagenObservacion.name || 'evidencia.png'}
+                      style={{ display: 'block', borderRadius: 10, overflow: 'hidden', border: `1px solid ${colors.border}` }}
+                      title="Clic para descargar la imagen"
+                    >
+                      <img
+                        src={selectedReport.imagenObservacion.dataUrl}
+                        alt={selectedReport.imagenObservacion.name || 'Imagen adjunta por el coordinador'}
+                        style={{ display: 'block', width: '100%', maxHeight: 320, objectFit: 'contain', background: rowBg }}
+                      />
+                    </a>
+                  </div>
+                )}
 
                 {selectedReport.marcas.length > 0 && (
                   <div style={{ marginBottom: 22 }}>
