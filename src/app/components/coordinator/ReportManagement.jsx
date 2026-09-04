@@ -1241,7 +1241,7 @@ export default function ReportManagement() {
     setError(null);
     try {
       const data = await getReports();
-      setReports(data.length > 0 ? data : initialReports);
+      setReports(data);
     } catch (err) {
       console.warn("Backend offline o error al cargar reportes. Usando datos de respaldo.", err);
       setError(err.message);
