@@ -79,9 +79,7 @@ function mapInforme(raw) {
     // el backend (como archivo real, no embebida aquí). El contenido se
     // pide aparte con downloadObservationImage(id) solo cuando se necesita
     // mostrarla, para no cargar cada fila del listado con datos pesados.
-    // ⚠️ Ajusta `raw.imagen_observacion_path` al nombre real que use tu
-    // backend para esta columna una vez la agregues.
-    hasImagenObservacion: Boolean(raw.imagen_observacion_path || raw.imagen_observacion),
+    hasImagenObservacion: Boolean(raw.imagenObservacionPath),
     // Fecha/hora exacta de envío y de revisión (timestamp real, no solo
     // "mes/año"). Requiere que el backend tenga las columnas created_at y
     // fecha_revision (ver nota en informe.entity.ts). Mientras el backend
@@ -280,11 +278,8 @@ export async function revisarGc(archivo, identificador) {
  * base64 dentro del JSON, porque eso excede el límite de tamaño del body
  * y tumba la petición completa (incluida la aprobación/corrección).
  *
- * ⚠️ PENDIENTE EN EL BACKEND: requiere que exista
- * POST /informe/:id/imagen-observacion (multipart, campo "imagen").
- * Si el backend no la implementa todavía, esta llamada fallará con 404 —
- * quien la use debe capturar el error y avisar sin romper el flujo
- * principal de aprobar/corregir (que ya no depende de esto).
+ * Requiere que el backend tenga POST /informe/:id/imagen-observacion
+ * (multipart, campo "imagen") — ya implementado en informe.controller.ts.
  *
  * @param {number|string} id - id_informe
  * @param {File} archivo - la imagen seleccionada por el coordinador
@@ -305,9 +300,9 @@ export async function uploadObservationImage(id, archivo) {
  * para poder mostrarla con permisos (requiere el token de autorización,
  * por eso no se puede usar un <img src="..."> directo apuntando al backend).
  *
- * ⚠️ PENDIENTE EN EL BACKEND: requiere
- * GET /informe/:id/imagen-observacion, igual patrón que ya existe para
- * GET /informe/:id/archivo (downloadReportFile).
+ * Requiere GET /informe/:id/imagen-observacion — ya implementado en
+ * informe.controller.ts, igual patrón que GET /informe/:id/archivo
+ * (downloadReportFile).
  *
  * @param {number|string} id - id_informe
  * @returns {Promise<Blob>}
