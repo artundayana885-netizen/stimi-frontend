@@ -834,6 +834,12 @@ function ReviewModal({ report, onClose, onApprove, onCorrect, onDownload }) {
   // nombre en la observación al aprobar/pedir corrección.
   const [attachedImage, setAttachedImage] = useState(null); // { name, dataUrl }
   const imageInputRef = useRef(null);
+  // Mensaje de error de validación de la imagen adjunta (tipo o tamaño
+  // inválido). Se declara aquí, junto a los demás hooks del componente y
+  // ANTES del "if (!report) return null;" de más abajo — los hooks de
+  // React siempre deben ejecutarse en el mismo orden en cada render,
+  // nunca después de un return condicional.
+  const [imageError, setImageError] = useState(null);
 
   // Cada vez que se abre un informe distinto, se limpian las marcas del
   // documento anterior.
@@ -862,7 +868,6 @@ function ReviewModal({ report, onClose, onApprove, onCorrect, onDownload }) {
   // uploadObservationImage. 8 MB es un margen cómodo para un pantallazo
   // o foto normal sin acercarse a límites típicos de subida de archivos.
   const MAX_IMAGE_MB = 8;
-  const [imageError, setImageError] = useState(null);
 
   const handleImageChange = (e) => {
     const file = e.target.files?.[0];
