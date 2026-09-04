@@ -645,6 +645,25 @@ export default function UnitView({ userName }) {
         ? data.filter(r => r.instructor === currentUserName)
         : data;
       setDbReports(filtered || []);
+
+      // Si el coordinador puso un informe en "A Corregir", eso significa
+      // que el instructor SÍ debe verlo y actuar — sin importar que en
+      // algún momento anterior lo hubiera "eliminado" localmente (lo cual
+      // solo lo esconde en este navegador, nunca en el servidor). Sin
+      // esto, un informe "eliminado" localmente queda escondido para
+      // siempre aunque el coordinador siga usando esa misma fila para
+      // pedir correcciones.
+      setDeletedIds(prev => {
+        if (prev.size === 0) return prev;
+        const toRevive = (filtered || [])
+          .filter(r => normalizeStatus(r.status) === 'A Corregir' && prev.has(r.id))
+          .map(r => r.id);
+        if (toRevive.length === 0) return prev;
+        const next = new Set(prev);
+        toRevive.forEach(id => next.delete(id));
+        persistDeletedIds(next);
+        return next;
+      });
     } catch (err) {
       console.error(err);
     }
