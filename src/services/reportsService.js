@@ -75,7 +75,21 @@ function mapInforme(raw) {
     // observación al aprobar o pedir corrección. Viene del backend como
     // `imagen_observacion` (snake_case, igual que tipo_notificacion) y se
     // guarda como { name, dataUrl } o null si no se adjuntó ninguna.
-    imagenObservacion: raw.imagen_observacion || null,
+    // Indica si este informe tiene una imagen de observación guardada en
+    // el backend (como archivo real, no embebida aquí). El contenido se
+    // pide aparte con downloadObservationImage(id) solo cuando se necesita
+    // mostrarla, para no cargar cada fila del listado con datos pesados.
+    // ⚠️ Ajusta `raw.imagen_observacion_path` al nombre real que use tu
+    // backend para esta columna una vez la agregues.
+    hasImagenObservacion: Boolean(raw.imagen_observacion_path || raw.imagen_observacion),
+    // Fecha/hora exacta de envío y de revisión (timestamp real, no solo
+    // "mes/año"). Requiere que el backend tenga las columnas created_at y
+    // fecha_revision (ver nota en informe.entity.ts). Mientras el backend
+    // no las tenga, quedan en null y el frontend sigue usando `date`
+    // (mes/año) como respaldo, así que esto no rompe nada si el backend
+    // todavía no fue actualizado.
+    createdAt: raw.created_at || null,
+    fechaRevision: raw.fecha_revision || null,
 
     // ── Campos decorativos, no existen en el backend ──
     initials: initialsFromName(raw.instructor),
@@ -257,4 +271,50 @@ export async function revisarGc(archivo, identificador) {
   // El interceptor de respuesta de apiClient ya convierte cualquier error HTTP
   // en un Error con mensaje legible, así que aquí solo devolvemos data en éxito.
   return data;
+}
+
+/**
+ * Sube la imagen (pantallazo/evidencia) que el coordinador adjunta al
+ * aprobar o pedir corrección de un informe. Va como archivo real
+ * (multipart/form-data) a un endpoint aparte del PATCH normal — NUNCA como
+ * base64 dentro del JSON, porque eso excede el límite de tamaño del body
+ * y tumba la petición completa (incluida la aprobación/corrección).
+ *
+ * ⚠️ PENDIENTE EN EL BACKEND: requiere que exista
+ * POST /informe/:id/imagen-observacion (multipart, campo "imagen").
+ * Si el backend no la implementa todavía, esta llamada fallará con 404 —
+ * quien la use debe capturar el error y avisar sin romper el flujo
+ * principal de aprobar/corregir (que ya no depende de esto).
+ *
+ * @param {number|string} id - id_informe
+ * @param {File} archivo - la imagen seleccionada por el coordinador
+ * @returns {Promise<Object>} respuesta del backend (ej. { ok: true })
+ */
+export async function uploadObservationImage(id, archivo) {
+  const formData = new FormData();
+  formData.append('imagen', archivo);
+
+  const { data } = await apiClient.post(`/informe/${id}/imagen-observacion`, formData, {
+    headers: { 'Content-Type': undefined },
+  });
+  return data;
+}
+
+/**
+ * Descarga la imagen de observación de un informe (si existe) como Blob,
+ * para poder mostrarla con permisos (requiere el token de autorización,
+ * por eso no se puede usar un <img src="..."> directo apuntando al backend).
+ *
+ * ⚠️ PENDIENTE EN EL BACKEND: requiere
+ * GET /informe/:id/imagen-observacion, igual patrón que ya existe para
+ * GET /informe/:id/archivo (downloadReportFile).
+ *
+ * @param {number|string} id - id_informe
+ * @returns {Promise<Blob>}
+ */
+export async function downloadObservationImage(id) {
+  const response = await apiClient.get(`/informe/${id}/imagen-observacion`, {
+    responseType: 'blob',
+  });
+  return response.data;
 }

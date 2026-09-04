@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, Component } from 'react';
 import { useTheme } from '../../../ThemeContext';
-import { getReports, deleteReport, getReportTraceability, downloadReportFile } from '../../../services/reportsService';
+import { getReports, deleteReport, getReportTraceability, downloadReportFile, downloadObservationImage } from '../../../services/reportsService';
 import jsPDF from 'jspdf';
 import mammoth from 'mammoth';
 
@@ -134,6 +134,21 @@ function normalizeStatus(status) {
   if (s.includes('corregir') || s.includes('correc')) return 'A Corregir';
   if (s.includes('revis')) return 'En Revisión';
   return 'Pendiente';
+}
+
+// ── Formatea una fecha/hora exacta (timestamp real del backend) en un
+// formato legible tipo "3 sept 2026, 3:44 p.m.". Si aún no hay timestamp
+// real (backend viejo, o informe creado antes de la migración), usa el
+// texto de respaldo (el "mes/año" que ya existía) para no dejar el campo
+// vacío.
+function formatExactDate(isoString, fallback) {
+  if (!isoString) return fallback || '—';
+  const d = new Date(isoString);
+  if (Number.isNaN(d.getTime())) return fallback || '—';
+  return d.toLocaleString('es-CO', {
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: 'numeric', minute: '2-digit',
+  });
 }
 
 // ── Texto por defecto que se muestra en "Comentarios" mientras no haya
@@ -512,6 +527,59 @@ function ReadOnlyDocumentViewer({ report }) {
   );
 }
 
+// ── Imagen de observación adjunta por el coordinador ──────────────────────
+// Se pide aparte (no viene en el listado de informes) porque es contenido
+// pesado y requiere el token de autorización, así que no se puede usar un
+// <img src="URL-del-backend"> directo — se descarga como blob con
+// apiClient (igual que el documento principal) y se muestra desde un
+// object URL local.
+function ObservationImage({ reportId }) {
+  const [state, setState] = useState({ loading: true, error: null, blobUrl: null });
+
+  useEffect(() => {
+    let cancelled = false;
+    let localBlobUrl = null;
+    setState({ loading: true, error: null, blobUrl: null });
+
+    downloadObservationImage(reportId)
+      .then((blob) => {
+        if (cancelled) return;
+        localBlobUrl = URL.createObjectURL(blob);
+        setState({ loading: false, error: null, blobUrl: localBlobUrl });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setState({ loading: false, error: err.message || 'No se pudo cargar la imagen.', blobUrl: null });
+      });
+
+    return () => {
+      cancelled = true;
+      if (localBlobUrl) URL.revokeObjectURL(localBlobUrl);
+    };
+  }, [reportId]);
+
+  if (state.loading) {
+    return <div style={{ fontSize: 12, color: '#9ca3af', padding: '10px 0' }}>Cargando imagen…</div>;
+  }
+  if (state.error) {
+    return <div style={{ fontSize: 12, color: '#dc2626', padding: '10px 0' }}>{state.error}</div>;
+  }
+  return (
+    <a
+      href={state.blobUrl}
+      download="evidencia.png"
+      style={{ display: 'block', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border, #E8ECF0)' }}
+      title="Clic para descargar la imagen"
+    >
+      <img
+        src={state.blobUrl}
+        alt="Imagen adjunta por el coordinador"
+        style={{ display: 'block', width: '100%', maxHeight: 320, objectFit: 'contain', background: '#F7F9FC' }}
+      />
+    </a>
+  );
+}
+
 export default function UnitView({ userName }) {
   const { colors, theme } = useTheme();
   const [dbReports, setDbReports] = useState([]);
@@ -720,8 +788,8 @@ export default function UnitView({ userName }) {
       id: r.id,
       name: `Informe ${r.type.toUpperCase()} - ${r.month}`,
       status: r.status || 'Pendiente',
-      sentDate: r.date,
-      reviewedDate: normStatus !== 'Pendiente' ? r.date : '—',
+      sentDate: formatExactDate(r.createdAt, r.date),
+      reviewedDate: normStatus !== 'Pendiente' ? formatExactDate(r.fechaRevision, r.date) : '—',
       color: colorForStatus(normStatus),
       reviewer: r.type === 'GC' ? 'Coordinador Académico' : 'Coordinador Financiero',
       size: '1.5 MB',
@@ -740,9 +808,10 @@ export default function UnitView({ userName }) {
       instructor: r.instructor,
       rawDate: r.date,
       marcas,
-      // Imagen (pantallazo/evidencia) que el coordinador adjuntó al
-      // aprobar o pedir corrección. { name, dataUrl } o null.
-      imagenObservacion: r.imagenObservacion || null,
+      // Solo indica si existe una imagen guardada en el backend; el
+      // contenido se pide aparte (ObservationImage) solo si hay que
+      // mostrarla, para no cargar el listado con datos pesados.
+      hasImagenObservacion: !!r.hasImagenObservacion,
       filePages,
       previewContent: defaultPreviewContent(r),
     };
@@ -1180,21 +1249,10 @@ export default function UnitView({ userName }) {
                   </div>
                 </div>
 
-                {selectedReport.imagenObservacion && (
+                {selectedReport.hasImagenObservacion && (
                   <div style={{ marginBottom: 22 }}>
                     <div style={{ ...eyebrow, marginBottom: 7 }}>Imagen adjunta por el coordinador</div>
-                    <a
-                      href={selectedReport.imagenObservacion.dataUrl}
-                      download={selectedReport.imagenObservacion.name || 'evidencia.png'}
-                      style={{ display: 'block', borderRadius: 10, overflow: 'hidden', border: `1px solid ${colors.border}` }}
-                      title="Clic para descargar la imagen"
-                    >
-                      <img
-                        src={selectedReport.imagenObservacion.dataUrl}
-                        alt={selectedReport.imagenObservacion.name || 'Imagen adjunta por el coordinador'}
-                        style={{ display: 'block', width: '100%', maxHeight: 320, objectFit: 'contain', background: rowBg }}
-                      />
-                    </a>
+                    <ObservationImage reportId={selectedReport.id} />
                   </div>
                 )}
 

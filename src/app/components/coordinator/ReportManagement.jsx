@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import Toast from '../Toast';
-import { getReports, updateReport, downloadReportFile } from '../../../services/reportsService';
+import { getReports, updateReport, downloadReportFile, uploadObservationImage } from '../../../services/reportsService';
 import mammoth from 'mammoth';
 import { useTheme } from '../../../ThemeContext';
 import { addHistoryEntry } from './SharedViews.jsx';
@@ -856,16 +856,33 @@ function ReviewModal({ report, onClose, onApprove, onCorrect, onDownload }) {
   const undoAnnotation = () => setAnnotations(prev => prev.slice(0, -1));
   const clearAnnotations = () => setAnnotations([]);
 
+  // Límite de tamaño del lado del cliente para la imagen adjunta. El
+  // dataUrl solo se usa para la miniatura local (nunca se manda al
+  // backend); el archivo real (`file`) se sube aparte con
+  // uploadObservationImage. 8 MB es un margen cómodo para un pantallazo
+  // o foto normal sin acercarse a límites típicos de subida de archivos.
+  const MAX_IMAGE_MB = 8;
+  const [imageError, setImageError] = useState(null);
+
   const handleImageChange = (e) => {
     const file = e.target.files?.[0];
     e.target.value = ''; // permite volver a elegir el mismo archivo después de quitarlo
     if (!file) return;
-    if (!file.type.startsWith('image/')) return;
+    setImageError(null);
+    if (!file.type.startsWith('image/')) {
+      setImageError('El archivo debe ser una imagen.');
+      return;
+    }
+    const sizeMb = file.size / (1024 * 1024);
+    if (sizeMb > MAX_IMAGE_MB) {
+      setImageError(`La imagen supera el tamaño máximo de ${MAX_IMAGE_MB} MB.`);
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = () => setAttachedImage({ name: file.name, dataUrl: reader.result });
+    reader.onload = () => setAttachedImage({ name: file.name, dataUrl: reader.result, file });
     reader.readAsDataURL(file);
   };
-  const removeAttachedImage = () => setAttachedImage(null);
+  const removeAttachedImage = () => { setAttachedImage(null); setImageError(null); };
 
   // Antepone la referencia de la imagen adjunta (si hay) a la observación
   // escrita, tanto para Aprobar como para Solicitar Corrección.
@@ -1095,6 +1112,9 @@ function ReviewModal({ report, onClose, onApprove, onCorrect, onDownload }) {
                     </button>
                   </div>
                 )}
+                {imageError && (
+                  <div style={{ marginTop: 6, fontSize: 11.5, color: '#dc2626' }}>{imageError}</div>
+                )}
               </div>
 
               {/* Acciones */}
@@ -1300,27 +1320,40 @@ export default function ReportManagement() {
 
   const handleApprove = async (id, note, notifType, attachedImage) => {
     try {
-      // NOTA: se removió el envío de `imagenObservacion` aquí. Mandar la
-      // imagen como base64 dentro del mismo PATCH que aprueba el informe
-      // causaba "request entity too large" en el backend y tumbaba TODA
-      // la petición (incluida la aprobación en sí). La forma correcta es
-      // subir la imagen como archivo real a un endpoint aparte (como ya
-      // hace revisarGc con multipart/form-data) y aquí solo guardar la
-      // URL resultante, que sí es liviana. Hasta que exista ese endpoint,
-      // no se persiste ninguna imagen.
+      // El PATCH que aprueba solo lleva texto — liviano, no puede dar
+      // "request entity too large". La imagen (si hay) se sube aparte,
+      // como archivo real, DESPUÉS de que la aprobación ya tuvo éxito.
       await updateReport(id, {
         status: 'Aprobado',
         observacion: note || 'Aprobado sin observaciones',
         tipo_notificacion: notifType || 'general',
       });
+
+      let imageUploadFailed = false;
+      if (attachedImage?.file) {
+        try {
+          await uploadObservationImage(id, attachedImage.file);
+        } catch (imgErr) {
+          // No relanzamos: la aprobación ya se guardó y no debe perderse
+          // por un problema al subir la imagen. Solo avisamos aparte.
+          imageUploadFailed = true;
+          console.error('No se pudo subir la imagen de observación:', imgErr);
+        }
+      }
+
       setReports(prev => prev.map(r => r.id === id ? {
         ...r,
         status: 'Aprobado',
         observacion: note || 'Aprobado sin observaciones',
         tipo_notificacion: notifType || 'general',
+        hasImagenObservacion: r.hasImagenObservacion || (!!attachedImage?.file && !imageUploadFailed),
         color: 'var(--sena-green)',
         bg: 'var(--sena-green-bg)'
       } : r));
+
+      if (imageUploadFailed) {
+        showToast('Informe aprobado, pero la imagen adjunta no se pudo subir.', '#D2A22E');
+      }
 
       const rep = reports.find(r => r.id === id);
       if (rep) {
@@ -1360,26 +1393,40 @@ export default function ReportManagement() {
       const baseNote = note || 'Solicitud de corrección sin observaciones detalladas.';
       const fullObservacion = baseNote + marksSummary;
 
-      // NOTA: se removió `imagenObservacion` del body — enviar la imagen en
-      // base64 dentro de este mismo PATCH era lo que causaba "request
-      // entity too large" y tumbaba toda la solicitud de corrección, con o
-      // sin imagen adjunta. Queda pendiente moverlo a un endpoint de
-      // subida de archivo real (multipart), igual que revisarGc.
+      // El PATCH que pide corrección solo lleva texto/marcas — liviano.
+      // La imagen (si hay) se sube aparte, como archivo real, DESPUÉS de
+      // que la solicitud de corrección ya tuvo éxito.
       await updateReport(id, {
         status: 'A Corregir',
         observacion: fullObservacion,
         tipo_notificacion: notifType || 'correccion',
         marcas: marks,
       });
+
+      let imageUploadFailed = false;
+      if (attachedImage?.file) {
+        try {
+          await uploadObservationImage(id, attachedImage.file);
+        } catch (imgErr) {
+          imageUploadFailed = true;
+          console.error('No se pudo subir la imagen de observación:', imgErr);
+        }
+      }
+
       setReports(prev => prev.map(r => r.id === id ? {
         ...r,
         status: 'A Corregir',
         observacion: fullObservacion,
         tipo_notificacion: notifType || 'correccion',
         marcas: marks,
+        hasImagenObservacion: r.hasImagenObservacion || (!!attachedImage?.file && !imageUploadFailed),
         color: 'var(--sena-orange)',
         bg: 'var(--sena-orange-bg)'
       } : r));
+
+      if (imageUploadFailed) {
+        showToast('Corrección solicitada, pero la imagen adjunta no se pudo subir.', '#D2A22E');
+      }
 
       const rep = reports.find(r => r.id === id);
       if (rep) {
