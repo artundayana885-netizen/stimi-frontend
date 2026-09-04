@@ -533,7 +533,7 @@ function ReadOnlyDocumentViewer({ report }) {
 // <img src="URL-del-backend"> directo — se descarga como blob con
 // apiClient (igual que el documento principal) y se muestra desde un
 // object URL local.
-function ObservationImage({ reportId }) {
+function ObservationImage({ reportId, index }) {
   const [state, setState] = useState({ loading: true, error: null, blobUrl: null });
 
   useEffect(() => {
@@ -541,7 +541,7 @@ function ObservationImage({ reportId }) {
     let localBlobUrl = null;
     setState({ loading: true, error: null, blobUrl: null });
 
-    downloadObservationImage(reportId)
+    downloadObservationImage(reportId, index)
       .then((blob) => {
         if (cancelled) return;
         localBlobUrl = URL.createObjectURL(blob);
@@ -556,7 +556,7 @@ function ObservationImage({ reportId }) {
       cancelled = true;
       if (localBlobUrl) URL.revokeObjectURL(localBlobUrl);
     };
-  }, [reportId]);
+  }, [reportId, index]);
 
   if (state.loading) {
     return <div style={{ fontSize: 12, color: '#9ca3af', padding: '10px 0' }}>Cargando imagen…</div>;
@@ -830,7 +830,7 @@ export default function UnitView({ userName }) {
       // Solo indica si existe una imagen guardada en el backend; el
       // contenido se pide aparte (ObservationImage) solo si hay que
       // mostrarla, para no cargar el listado con datos pesados.
-      hasImagenObservacion: !!r.hasImagenObservacion,
+      imagenesObservacionCount: r.imagenesObservacionCount || 0,
       filePages,
       previewContent: defaultPreviewContent(r),
     };
@@ -1268,10 +1268,18 @@ export default function UnitView({ userName }) {
                   </div>
                 </div>
 
-                {selectedReport.hasImagenObservacion && (
+                {selectedReport.imagenesObservacionCount > 0 && (
                   <div style={{ marginBottom: 22 }}>
-                    <div style={{ ...eyebrow, marginBottom: 7 }}>Imagen adjunta por el coordinador</div>
-                    <ObservationImage reportId={selectedReport.id} />
+                    <div style={{ ...eyebrow, marginBottom: 7 }}>
+                      {selectedReport.imagenesObservacionCount === 1
+                        ? 'Imagen adjunta por el coordinador'
+                        : `Imágenes adjuntas por el coordinador (${selectedReport.imagenesObservacionCount})`}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+                      {Array.from({ length: selectedReport.imagenesObservacionCount }).map((_, i) => (
+                        <ObservationImage key={i} reportId={selectedReport.id} index={i} />
+                      ))}
+                    </div>
                   </div>
                 )}
 

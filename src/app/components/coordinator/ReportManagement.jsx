@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import Toast from '../Toast';
-import { getReports, updateReport, downloadReportFile, uploadObservationImage } from '../../../services/reportsService';
+import { getReports, updateReport, downloadReportFile, uploadObservationImages } from '../../../services/reportsService';
 import mammoth from 'mammoth';
 import { useTheme } from '../../../ThemeContext';
 import { addHistoryEntry } from './SharedViews.jsx';
@@ -828,18 +828,19 @@ function ReviewModal({ report, onClose, onApprove, onCorrect, onDownload }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [annotations, setAnnotations] = useState([]);
   const [activeTool, setActiveTool] = useState(null);
-  // Imagen adjunta a la observación (evidencia adicional del error, ej. un
-  // pantallazo). Se guarda como data URL en memoria: solo vive mientras el
-  // modal está abierto, se muestra en la vista previa y se referencia por
-  // nombre en la observación al aprobar/pedir corrección.
-  const [attachedImage, setAttachedImage] = useState(null); // { name, dataUrl }
+  // Imágenes adjuntas a la observación (evidencia adicional del error, ej.
+  // pantallazos). Se guardan como data URL en memoria: solo viven mientras
+  // el modal está abierto, se muestran en la vista previa y se referencian
+  // por nombre en la observación al aprobar/pedir corrección. Máximo 5.
+  const [attachedImages, setAttachedImages] = useState([]); // [{ name, dataUrl, file }, ...]
   const imageInputRef = useRef(null);
-  // Mensaje de error de validación de la imagen adjunta (tipo o tamaño
-  // inválido). Se declara aquí, junto a los demás hooks del componente y
-  // ANTES del "if (!report) return null;" de más abajo — los hooks de
-  // React siempre deben ejecutarse en el mismo orden en cada render,
-  // nunca después de un return condicional.
+  // Mensaje de error de validación de la imagen adjunta (tipo, tamaño o
+  // límite de cantidad). Se declara aquí, junto a los demás hooks del
+  // componente y ANTES del "if (!report) return null;" de más abajo — los
+  // hooks de React siempre deben ejecutarse en el mismo orden en cada
+  // render, nunca después de un return condicional.
   const [imageError, setImageError] = useState(null);
+  const MAX_IMAGES = 5;
 
   // Cada vez que se abre un informe distinto, se limpian las marcas del
   // documento anterior.
@@ -848,7 +849,7 @@ function ReviewModal({ report, onClose, onApprove, onCorrect, onDownload }) {
     setActiveTool(null);
     setNote('');
     setNotifType('');
-    setAttachedImage(null);
+    setAttachedImages([]);
   }, [report?.id]);
 
   if (!report) return null;
@@ -862,38 +863,58 @@ function ReviewModal({ report, onClose, onApprove, onCorrect, onDownload }) {
   const undoAnnotation = () => setAnnotations(prev => prev.slice(0, -1));
   const clearAnnotations = () => setAnnotations([]);
 
-  // Límite de tamaño del lado del cliente para la imagen adjunta. El
+  // Límite de tamaño del lado del cliente para cada imagen adjunta. El
   // dataUrl solo se usa para la miniatura local (nunca se manda al
   // backend); el archivo real (`file`) se sube aparte con
-  // uploadObservationImage. 8 MB es un margen cómodo para un pantallazo
+  // uploadObservationImages. 8 MB es un margen cómodo para un pantallazo
   // o foto normal sin acercarse a límites típicos de subida de archivos.
   const MAX_IMAGE_MB = 8;
 
   const handleImageChange = (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // permite volver a elegir el mismo archivo después de quitarlo
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    e.target.value = ''; // permite volver a elegir los mismos archivos después de quitarlos
+    if (files.length === 0) return;
     setImageError(null);
-    if (!file.type.startsWith('image/')) {
-      setImageError('El archivo debe ser una imagen.');
-      return;
-    }
-    const sizeMb = file.size / (1024 * 1024);
-    if (sizeMb > MAX_IMAGE_MB) {
-      setImageError(`La imagen supera el tamaño máximo de ${MAX_IMAGE_MB} MB.`);
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => setAttachedImage({ name: file.name, dataUrl: reader.result, file });
-    reader.readAsDataURL(file);
-  };
-  const removeAttachedImage = () => { setAttachedImage(null); setImageError(null); };
 
-  // Antepone la referencia de la imagen adjunta (si hay) a la observación
-  // escrita, tanto para Aprobar como para Solicitar Corrección.
+    const espacioDisponible = MAX_IMAGES - attachedImages.length;
+    if (espacioDisponible <= 0) {
+      setImageError(`Ya adjuntaste el máximo de ${MAX_IMAGES} imágenes.`);
+      return;
+    }
+    const seleccionadas = files.slice(0, espacioDisponible);
+    if (files.length > espacioDisponible) {
+      setImageError(`Solo se agregaron ${espacioDisponible} de ${files.length}: el máximo es ${MAX_IMAGES} imágenes.`);
+    }
+
+    seleccionadas.forEach((file) => {
+      if (!file.type.startsWith('image/')) {
+        setImageError('Cada archivo debe ser una imagen.');
+        return;
+      }
+      const sizeMb = file.size / (1024 * 1024);
+      if (sizeMb > MAX_IMAGE_MB) {
+        setImageError(`"${file.name}" supera el tamaño máximo de ${MAX_IMAGE_MB} MB.`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => setAttachedImages(prev => (
+        prev.length >= MAX_IMAGES ? prev : [...prev, { name: file.name, dataUrl: reader.result, file }]
+      ));
+      reader.readAsDataURL(file);
+    });
+  };
+  const removeAttachedImage = (index) => {
+    setAttachedImages(prev => prev.filter((_, i) => i !== index));
+    setImageError(null);
+  };
+
+  // Antepone la referencia de las imágenes adjuntas (si hay) a la
+  // observación escrita, tanto para Aprobar como para Solicitar Corrección.
   const buildNoteWithImage = () => {
-    if (!attachedImage) return note;
-    const imgRef = `📎 Imagen adjunta: ${attachedImage.name}`;
+    if (attachedImages.length === 0) return note;
+    const imgRef = attachedImages.length === 1
+      ? `📎 Imagen adjunta: ${attachedImages[0].name}`
+      : `📎 Imágenes adjuntas (${attachedImages.length}): ${attachedImages.map(img => img.name).join(', ')}`;
     return note ? `${note}\n\n${imgRef}` : imgRef;
   };
 
@@ -1072,15 +1093,45 @@ function ReviewModal({ report, onClose, onApprove, onCorrect, onDownload }) {
                 />
                 <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 4, textAlign: 'right' }}>{note.length} caracteres</div>
 
-                {/* Adjuntar imagen a la observación */}
+                {/* Adjuntar imágenes a la observación (hasta 5) */}
                 <input
                   ref={imageInputRef}
                   type="file"
                   accept="image/*"
+                  multiple
                   onChange={handleImageChange}
                   style={{ display: 'none' }}
                 />
-                {!attachedImage ? (
+                {attachedImages.length > 0 && (
+                  <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {attachedImages.map((img, i) => (
+                      <div key={i} style={{
+                        position: 'relative', width: 64, height: 64, borderRadius: 8,
+                        border: '1px solid var(--border)', overflow: 'hidden', flexShrink: 0,
+                      }}>
+                        <img
+                          src={img.dataUrl}
+                          alt={img.name}
+                          title={img.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeAttachedImage(i)}
+                          title="Quitar imagen"
+                          style={{
+                            position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: '50%',
+                            border: 'none', background: 'rgba(0,0,0,0.6)', color: '#fff', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                          }}
+                        >
+                          <X size={11} strokeWidth={2.5} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {attachedImages.length < MAX_IMAGES ? (
                   <button
                     type="button"
                     onClick={() => imageInputRef.current?.click()}
@@ -1091,30 +1142,12 @@ function ReviewModal({ report, onClose, onApprove, onCorrect, onDownload }) {
                       display: 'flex', alignItems: 'center', gap: 6,
                     }}
                   >
-                    <Paperclip size={13} strokeWidth={2.25} /> Adjuntar imagen
+                    <Paperclip size={13} strokeWidth={2.25} />
+                    {attachedImages.length === 0 ? 'Adjuntar imagen' : `Agregar otra (${attachedImages.length}/${MAX_IMAGES})`}
                   </button>
                 ) : (
-                  <div style={{
-                    marginTop: 8, display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '8px 10px', borderRadius: 10, border: '1px solid var(--border)',
-                    background: 'var(--surface-alt)',
-                  }}>
-                    <img
-                      src={attachedImage.dataUrl}
-                      alt={attachedImage.name}
-                      style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover', flexShrink: 0, border: '1px solid var(--border)' }}
-                    />
-                    <span style={{ flex: 1, fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {attachedImage.name}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={removeAttachedImage}
-                      title="Quitar imagen"
-                      style={{ border: 'none', background: 'none', color: 'var(--text-faint)', cursor: 'pointer', flexShrink: 0, display: 'flex' }}
-                    >
-                      <X size={15} strokeWidth={2.25} />
-                    </button>
+                  <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--text-faint)' }}>
+                    Máximo de {MAX_IMAGES} imágenes alcanzado.
                   </div>
                 )}
                 {imageError && (
@@ -1125,14 +1158,14 @@ function ReviewModal({ report, onClose, onApprove, onCorrect, onDownload }) {
               {/* Acciones */}
               {report.status !== 'Aprobado' && (
                 <div className="coord-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <button onClick={() => onCorrect(report.id, buildNoteWithImage(), notifType, annotations, attachedImage)} style={{
+                  <button onClick={() => onCorrect(report.id, buildNoteWithImage(), notifType, annotations, attachedImages)} style={{
                     padding: '12px', borderRadius: 10, border: 'none',
                     background: 'var(--sena-orange-bg)', color: 'var(--sena-orange)', fontWeight: 700, fontSize: 13, cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
                   }}>
                     <Pencil size={15} strokeWidth={2.25} /> Solicitar Corrección
                   </button>
-                  <button onClick={() => onApprove(report.id, buildNoteWithImage(), notifType, attachedImage)} style={{
+                  <button onClick={() => onApprove(report.id, buildNoteWithImage(), notifType, attachedImages)} style={{
                     padding: '12px', borderRadius: 10, border: 'none',
                     background: 'linear-gradient(135deg, var(--sena-green-solid), var(--sena-green-strong))', color: '#fff',
                     fontWeight: 700, fontSize: 13, cursor: 'pointer',
@@ -1323,11 +1356,11 @@ export default function ReportManagement() {
     }
   };
 
-  const handleApprove = async (id, note, notifType, attachedImage) => {
+  const handleApprove = async (id, note, notifType, attachedImages = []) => {
     try {
       // El PATCH que aprueba solo lleva texto — liviano, no puede dar
-      // "request entity too large". La imagen (si hay) se sube aparte,
-      // como archivo real, DESPUÉS de que la aprobación ya tuvo éxito.
+      // "request entity too large". Las imágenes (si hay) se suben aparte,
+      // como archivos reales, DESPUÉS de que la aprobación ya tuvo éxito.
       await updateReport(id, {
         status: 'Aprobado',
         observacion: note || 'Aprobado sin observaciones',
@@ -1335,14 +1368,17 @@ export default function ReportManagement() {
       });
 
       let imageUploadFailed = false;
-      if (attachedImage?.file) {
+      const archivos = attachedImages.map(img => img.file).filter(Boolean);
+      let imagenesSubidas = 0;
+      if (archivos.length > 0) {
         try {
-          await uploadObservationImage(id, attachedImage.file);
+          await uploadObservationImages(id, archivos);
+          imagenesSubidas = archivos.length;
         } catch (imgErr) {
           // No relanzamos: la aprobación ya se guardó y no debe perderse
-          // por un problema al subir la imagen. Solo avisamos aparte.
+          // por un problema al subir las imágenes. Solo avisamos aparte.
           imageUploadFailed = true;
-          console.error('No se pudo subir la imagen de observación:', imgErr);
+          console.error('No se pudieron subir las imágenes de observación:', imgErr);
         }
       }
 
@@ -1351,13 +1387,13 @@ export default function ReportManagement() {
         status: 'Aprobado',
         observacion: note || 'Aprobado sin observaciones',
         tipo_notificacion: notifType || 'general',
-        hasImagenObservacion: r.hasImagenObservacion || (!!attachedImage?.file && !imageUploadFailed),
+        imagenesObservacionCount: (r.imagenesObservacionCount || 0) + (imageUploadFailed ? 0 : imagenesSubidas),
         color: 'var(--sena-green)',
         bg: 'var(--sena-green-bg)'
       } : r));
 
       if (imageUploadFailed) {
-        showToast('Informe aprobado, pero la imagen adjunta no se pudo subir.', '#D2A22E');
+        showToast('Informe aprobado, pero las imágenes adjuntas no se pudieron subir.', '#D2A22E');
       }
 
       const rep = reports.find(r => r.id === id);
@@ -1388,7 +1424,7 @@ export default function ReportManagement() {
   // y comentarios/pin) que el coordinador dejó en el visor. Se resumen y se
   // agregan automáticamente a la observación para que el instructor sepa
   // exactamente dónde está el error.
-  const handleCorrect = async (id, note, notifType, marks = [], attachedImage) => {
+  const handleCorrect = async (id, note, notifType, marks = [], attachedImages = []) => {
     try {
       const marksSummary = marks.length > 0
         ? '\n\nMarcas señaladas en el documento:\n' + marks
@@ -1399,8 +1435,8 @@ export default function ReportManagement() {
       const fullObservacion = baseNote + marksSummary;
 
       // El PATCH que pide corrección solo lleva texto/marcas — liviano.
-      // La imagen (si hay) se sube aparte, como archivo real, DESPUÉS de
-      // que la solicitud de corrección ya tuvo éxito.
+      // Las imágenes (si hay) se suben aparte, como archivos reales,
+      // DESPUÉS de que la solicitud de corrección ya tuvo éxito.
       await updateReport(id, {
         status: 'A Corregir',
         observacion: fullObservacion,
@@ -1409,12 +1445,15 @@ export default function ReportManagement() {
       });
 
       let imageUploadFailed = false;
-      if (attachedImage?.file) {
+      const archivos = attachedImages.map(img => img.file).filter(Boolean);
+      let imagenesSubidas = 0;
+      if (archivos.length > 0) {
         try {
-          await uploadObservationImage(id, attachedImage.file);
+          await uploadObservationImages(id, archivos);
+          imagenesSubidas = archivos.length;
         } catch (imgErr) {
           imageUploadFailed = true;
-          console.error('No se pudo subir la imagen de observación:', imgErr);
+          console.error('No se pudieron subir las imágenes de observación:', imgErr);
         }
       }
 
@@ -1424,13 +1463,13 @@ export default function ReportManagement() {
         observacion: fullObservacion,
         tipo_notificacion: notifType || 'correccion',
         marcas: marks,
-        hasImagenObservacion: r.hasImagenObservacion || (!!attachedImage?.file && !imageUploadFailed),
+        imagenesObservacionCount: (r.imagenesObservacionCount || 0) + (imageUploadFailed ? 0 : imagenesSubidas),
         color: 'var(--sena-orange)',
         bg: 'var(--sena-orange-bg)'
       } : r));
 
       if (imageUploadFailed) {
-        showToast('Corrección solicitada, pero la imagen adjunta no se pudo subir.', '#D2A22E');
+        showToast('Corrección solicitada, pero las imágenes adjuntas no se pudieron subir.', '#D2A22E');
       }
 
       const rep = reports.find(r => r.id === id);

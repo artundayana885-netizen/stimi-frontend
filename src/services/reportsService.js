@@ -75,11 +75,11 @@ function mapInforme(raw) {
     // observación al aprobar o pedir corrección. Viene del backend como
     // `imagen_observacion` (snake_case, igual que tipo_notificacion) y se
     // guarda como { name, dataUrl } o null si no se adjuntó ninguna.
-    // Indica si este informe tiene una imagen de observación guardada en
-    // el backend (como archivo real, no embebida aquí). El contenido se
-    // pide aparte con downloadObservationImage(id) solo cuando se necesita
-    // mostrarla, para no cargar cada fila del listado con datos pesados.
-    hasImagenObservacion: Boolean(raw.imagenObservacionPath),
+    // Cuántas imágenes de evidencia dejó el coordinador (0 a 5). El
+    // contenido de cada una se pide aparte con downloadObservationImage(id,
+    // index) solo cuando se necesita mostrarla, para no cargar cada fila
+    // del listado con datos pesados.
+    imagenesObservacionCount: Array.isArray(raw.imagenesObservacion) ? raw.imagenesObservacion.length : 0,
     // Fecha/hora exacta de envío y de revisión (timestamp real, no solo
     // "mes/año"). Requiere que el backend tenga las columnas created_at y
     // fecha_revision (ver nota en informe.entity.ts). Mientras el backend
@@ -272,22 +272,24 @@ export async function revisarGc(archivo, identificador) {
 }
 
 /**
- * Sube la imagen (pantallazo/evidencia) que el coordinador adjunta al
- * aprobar o pedir corrección de un informe. Va como archivo real
- * (multipart/form-data) a un endpoint aparte del PATCH normal — NUNCA como
- * base64 dentro del JSON, porque eso excede el límite de tamaño del body
- * y tumba la petición completa (incluida la aprobación/corrección).
+ * Sube hasta 5 imágenes (pantallazos/evidencia) que el coordinador adjunta
+ * al aprobar o pedir corrección de un informe. Van como archivos reales
+ * (multipart/form-data) en una sola petición, campo "imagenes" repetido —
+ * NUNCA como base64 dentro del JSON, porque eso excede el límite de
+ * tamaño del body y tumba la petición completa (incluida la
+ * aprobación/corrección).
  *
  * Requiere que el backend tenga POST /informe/:id/imagen-observacion
- * (multipart, campo "imagen") — ya implementado en informe.controller.ts.
+ * (multipart, campo "imagenes", máximo 5) — ya implementado en
+ * informe.controller.ts.
  *
  * @param {number|string} id - id_informe
- * @param {File} archivo - la imagen seleccionada por el coordinador
- * @returns {Promise<Object>} respuesta del backend (ej. { ok: true })
+ * @param {File[]} archivos - las imágenes seleccionadas por el coordinador (máx. 5)
+ * @returns {Promise<Object>} respuesta del backend (el informe actualizado)
  */
-export async function uploadObservationImage(id, archivo) {
+export async function uploadObservationImages(id, archivos) {
   const formData = new FormData();
-  formData.append('imagen', archivo);
+  archivos.forEach((archivo) => formData.append('imagenes', archivo));
 
   const { data } = await apiClient.post(`/informe/${id}/imagen-observacion`, formData, {
     headers: { 'Content-Type': undefined },
@@ -296,19 +298,21 @@ export async function uploadObservationImage(id, archivo) {
 }
 
 /**
- * Descarga la imagen de observación de un informe (si existe) como Blob,
- * para poder mostrarla con permisos (requiere el token de autorización,
- * por eso no se puede usar un <img src="..."> directo apuntando al backend).
+ * Descarga UNA imagen de observación de un informe (por su posición en el
+ * arreglo, 0-indexed) como Blob, para poder mostrarla con permisos
+ * (requiere el token de autorización, por eso no se puede usar un
+ * <img src="..."> directo apuntando al backend).
  *
- * Requiere GET /informe/:id/imagen-observacion — ya implementado en
- * informe.controller.ts, igual patrón que GET /informe/:id/archivo
+ * Requiere GET /informe/:id/imagen-observacion/:index — ya implementado
+ * en informe.controller.ts, igual patrón que GET /informe/:id/archivo
  * (downloadReportFile).
  *
  * @param {number|string} id - id_informe
+ * @param {number} index - posición de la imagen dentro del arreglo (0, 1, 2...)
  * @returns {Promise<Blob>}
  */
-export async function downloadObservationImage(id) {
-  const response = await apiClient.get(`/informe/${id}/imagen-observacion`, {
+export async function downloadObservationImage(id, index = 0) {
+  const response = await apiClient.get(`/informe/${id}/imagen-observacion/${index}`, {
     responseType: 'blob',
   });
   return response.data;
